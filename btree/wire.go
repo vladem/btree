@@ -65,7 +65,7 @@ func (s *streamDecoder) consume(chunk []byte) *message {
 	}
 	if eof {
 		message := createMessage(s.buffer)
-		s.buffer = nil
+		s.buffer = nil // todo: support multiple messages in a stream
 		return message
 	}
 	return nil

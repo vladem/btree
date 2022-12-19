@@ -65,23 +65,27 @@ func (s *Server) Serve() error {
 
 func (w *worker) handleConnection(conn *net.Conn) {
 	defer (*conn).Close()
-	var (
-		buffer  = make([]byte, 0)
-		chunk   = make([]byte, 64)
-		msg     = nil
-		decoder = makeDecoder()
-	)
+	/*
+	   var (
 
-	for msg == nil {
-		read, err := (*conn).Read(chunk)
-		if err != nil {
-			w.logger.Printf("failed to read with error [%v]", err)
-			break
-		}
-		msg := decoder.consume(chunk)
-	}
+	   	msg     *message
+	   	buffer  = make([]byte, 0)
+	   	chunk   = make([]byte, 64)
+	   	decoder = makeDecoder()
 
-	w.logger.Printf("received data [%s]", buffer)
+	   )
+
+	   	for msg == nil {
+	   		read, err := (*conn).Read(chunk)
+	   		if err != nil {
+	   			w.logger.Printf("failed to read with error [%v]", err)
+	   			break
+	   		}
+	   		msg := decoder.consume(chunk)
+	   	}
+
+	   w.logger.Printf("received data [%s]", buffer)
+	*/
 }
 
 func (w *worker) doWork() {
