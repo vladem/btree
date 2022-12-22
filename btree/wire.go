@@ -1,9 +1,20 @@
 package btree
 
+import (
+	"container/list"
+	"fmt"
+	"log"
+)
+
 type message struct {
 	commandType uint8
 	payloads    [][]byte
 }
+
+var (
+	commandTypeGet = uint8('g')
+	commandTypePut = uint8('p')
+)
 
 type getMessage struct {
 	key []byte
@@ -15,11 +26,13 @@ type putMessage struct {
 }
 
 type streamDecoder struct {
-	buffer []byte
+	buffer     []byte
+	messages   *list.List
+	telnetMode bool
 }
 
-func makeDecoder() *streamDecoder {
-	return &streamDecoder{}
+func makeDecoder(telnetMode bool) *streamDecoder {
+	return &streamDecoder{messages: list.New(), telnetMode: telnetMode}
 }
 
 func createMessage(buffer []byte) *message {
@@ -49,32 +62,75 @@ func createMessage(buffer []byte) *message {
 	return message
 }
 
-func (s *streamDecoder) consume(chunk []byte) *message {
-	eof := false
-	escaped := false
-	for i := 0; i < len(chunk); i++ {
+func (s *streamDecoder) isFilteredOut(ch byte) bool {
+	if !s.telnetMode {
+		return false
+	}
+	return ch == 10 || ch == 13
+}
+
+func (s *streamDecoder) consume(chunk []byte) {
+	var (
+		i       int
+		ch      byte
+		eof     = false
+		escaped = false
+	)
+	for i, ch = range chunk {
+		if s.isFilteredOut(ch) {
+			continue
+		}
 		if escaped {
 			escaped = false
-		} else if chunk[i] == '\\' {
+		} else if ch == '\\' {
 			escaped = true
-		} else if chunk[i] == '$' {
+		} else if ch == '$' {
 			eof = true
 			break
 		}
-		s.buffer = append(s.buffer, chunk[i])
+		s.buffer = append(s.buffer, ch)
 	}
 	if eof {
-		message := createMessage(s.buffer)
-		s.buffer = nil // todo: support multiple messages in a stream
-		return message
+		msg := createMessage(s.buffer)
+		s.messages.PushBack(msg)
+		s.buffer = nil
+		s.consume(chunk[i+1:])
 	}
-	return nil
 }
 
-// func (m *message) ToGetMessage() (*getMessage, error) {
+func (s *streamDecoder) hasNext() bool {
+	return s.messages.Len() > 0
+}
 
-// }
+func (s *streamDecoder) next() *message {
+	if !s.hasNext() {
+		return nil
+	}
+	qElem := s.messages.Front()
+	msg, ok := qElem.Value.(*message)
+	if !ok {
+		log.Fatalf("expected message ptr, got: %v", qElem.Value)
+	}
+	s.messages.Remove(qElem)
+	return msg
+}
 
-// func (m *message) ToPutMessage() (*putMessage, error) {
+func (m *message) ToGetMessage() (*getMessage, error) {
+	if m.commandType != commandTypeGet {
+		return nil, fmt.Errorf("unexpected commandType for message: %v", m)
+	}
+	if len(m.payloads) != 1 {
+		return nil, fmt.Errorf("unexpected payloads for message: %v", m)
+	}
+	return &getMessage{key: m.payloads[0]}, nil
+}
 
-// }
+func (m *message) ToPutMessage() (*putMessage, error) {
+	if m.commandType != commandTypePut {
+		return nil, fmt.Errorf("unexpected commandType for message: %v", m)
+	}
+	if len(m.payloads) != 2 {
+		return nil, fmt.Errorf("unexpected payloads for message: %v", m)
+	}
+	return &putMessage{key: m.payloads[0], value: m.payloads[1]}, nil
+}
