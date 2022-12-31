@@ -1,4 +1,4 @@
-package btree
+package server
 
 import (
 	"errors"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net"
+
+	"github.com/vladem/btree/btree"
 )
 
 type ServerConfig struct {
@@ -33,7 +35,7 @@ type ServerConfig struct {
 // messages of all types are terminated with '$'
 type Server struct {
 	cfg      ServerConfig
-	bTree    BTreeI
+	bTree    btree.IBTree
 	listener *net.Listener
 }
 
@@ -43,7 +45,7 @@ type worker struct {
 	server *Server
 }
 
-func MakeServer(cfg ServerConfig, bTree BTreeI) (*Server, error) {
+func MakeServer(cfg ServerConfig, bTree btree.IBTree) (*Server, error) {
 	ln, err := net.Listen("tcp", ":"+cfg.Port)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on port [%s] with error [%v]", cfg.Port, err)

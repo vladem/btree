@@ -4,15 +4,16 @@ import (
 	"log"
 
 	"github.com/vladem/btree/btree"
+	"github.com/vladem/btree/server"
 )
 
 func main() {
-	cfg := btree.ServerConfig{
+	cfg := server.ServerConfig{
 		Port:       "8080",
 		Workers:    2,
 		TelnetMode: true,
 	}
-	server, err := btree.MakeServer(cfg, btree.MakeDummyBTreeT())
+	server, err := server.MakeServer(cfg, btree.MakeDummyBTree())
 	if err != nil {
 		log.Fatalf("failed to create server with error [%v]\n", err)
 	}

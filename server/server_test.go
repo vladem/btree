@@ -1,4 +1,4 @@
-package btree_test
+package server_test
 
 import (
 	"net"
@@ -6,15 +6,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/vladem/btree/btree"
+	"github.com/vladem/btree/server"
 )
 
 func createServer(t *testing.T, port string) chan struct{} {
-	cfg := btree.ServerConfig{
+	cfg := server.ServerConfig{
 		Port:       port,
 		Workers:    2,
 		TelnetMode: true,
 	}
-	server, err := btree.MakeServer(cfg, btree.MakeDummyBTreeT())
+	server, err := server.MakeServer(cfg, btree.MakeDummyBTree())
 	if err != nil {
 		t.Fatalf("failed to create server with error [%v]\n", err)
 	}
@@ -31,7 +32,7 @@ func writeAndCheck(t *testing.T, conn *net.Conn, data []byte) {
 	assert.Equal(t, n, len(data))
 }
 
-func TestGetExisting(t *testing.T) {
+func TestServerSimpleGet(t *testing.T) {
 	port := "8080"
 	cancel := createServer(t, port)
 	conn, err := net.Dial("tcp", "localhost:"+port)
