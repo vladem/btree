@@ -25,9 +25,10 @@ Repo consists of several packages:
 
 Dependency chain:
 
+```
 server -> btree -> storage
-
-               `-> util
+                -> util
+```
 
 ## Diagrams
 
@@ -49,7 +50,7 @@ This design is better suited for disk as data access require less separate disk 
 
 ### Ok, got it about reads, but what about insertions and deletions?
 
-<TBD>: rebalancing algorithm and comparison to classical binary tree rotation technique.
+TBD: rebalancing algorithm and comparison to classical binary tree rotation technique.
 
 ## Resources
 
