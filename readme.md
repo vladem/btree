@@ -18,13 +18,15 @@ telnet localhost 8080  # open a tcp connection to the server
 ## Structure
 
 Repo consists of several packages: 
-1. server (tcp server and a wire protocl implementations)
+1. server (tcp server and a wire protocol implementations)
 1. btree (btree's interface and traversal implementation)
-1. storage (implementation of slotted pages used to store btree nodes and )
+1. storage (implementation of slotted pages used to store btree nodes and links between them)
 1. util
 
 Dependency chain:
+
 server -> btree -> storage
+
                `-> util
 
 ## Diagrams
