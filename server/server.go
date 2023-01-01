@@ -105,7 +105,7 @@ func (w *worker) handleConnection(conn *net.Conn) {
 					w.logger.Printf("invalid msg, type: %d, data: %v", next.commandType, next.payloads)
 					continue
 				}
-				val := w.server.bTree.Get(getM.key)
+				val, _ := w.server.bTree.Get(getM.key)
 				result := []byte{'f'}
 				if val != nil {
 					result[0] = 's'

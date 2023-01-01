@@ -8,19 +8,20 @@ type TDummyBTree struct {
 	mutex *sync.RWMutex
 }
 
-func (bt *TDummyBTree) Get(key []byte) []byte {
+func (bt *TDummyBTree) Get(key []byte) ([]byte, error) {
 	bt.mutex.RLock()
 	defer bt.mutex.RUnlock()
 	if val, ok := bt.data[string(key)]; ok {
-		return val
+		return val, nil
 	}
-	return nil
+	return nil, nil
 }
 
-func (bt *TDummyBTree) Put(key, value []byte) {
+func (bt *TDummyBTree) Put(key, value []byte) error {
 	bt.mutex.Lock()
 	defer bt.mutex.Unlock()
 	bt.data[string(key)] = value
+	return nil
 }
 
 func MakeDummyBTree() *TDummyBTree {

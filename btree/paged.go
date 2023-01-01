@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/vladem/btree/storage"
@@ -11,36 +12,49 @@ type TPagedBTree struct {
 	reader storage.IPageReader
 }
 
-func (t *TPagedBTree) Get(target []byte) []byte {
-	err := t.reader.Rewind()
-	if err != nil {
-		log.Fatalf("rewind failed")
-	}
+func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
 	lastComparison := int8(-1)
+	page, err := t.reader.Read(0)
+	if err != nil {
+		return nil, err
+	}
+	var cell storage.ICell
 	for {
-		for {
-			cell, err := t.reader.NextCell()
+		for i := uint32(0); i < page.GetCellsCount(); i++ {
+			cell, err = page.GetCell(i)
 			if err != nil {
-				log.Fatalf("failed to read next cell with error: [%v]", err)
+				return nil, fmt.Errorf("failed to read next cell with error [%v], cellId [%v]", err, i)
 			}
-			lastComparison = util.Compare(target, cell.GetKey())
+			key, err := cell.GetKey()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read next cell with error [%v], cellId [%v]", err, i)
+			}
+			if key != nil {
+				lastComparison = util.Compare(target, key)
+			} else {
+				lastComparison = -1
+			}
 			// searching for first cell, which key is gte target
-			if lastComparison < 1 || cell.IsLast() {
+			if lastComparison < 1 {
 				break
 			}
 		}
-		if !t.reader.IsLeaf() {
+		if page.IsLeaf() {
 			break
 		}
-		err = t.reader.NextPage()
+		nextPageId, err := cell.GetValueAsUint32()
 		if err != nil {
-			log.Fatalf("failed to read next page with error: [%v]", err)
+			return nil, err
+		}
+		page, err = t.reader.Read(nextPageId)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if lastComparison != 0 {
-		return nil
+		return nil, nil
 	}
-	return t.reader.CurrentCell().GetValue()
+	return cell.GetValue()
 }
 
 func (t *TPagedBTree) Put(key, value []byte) {
