@@ -5,6 +5,11 @@ type TPageConfig struct {
 	FilePath  string
 }
 
+type TPageReaderStatistics struct {
+	ReadCalls uint32
+	BytesRead uint32
+}
+
 type ICell interface {
 	GetKey() ([]byte, error)
 	GetValue() ([]byte, error)
@@ -23,8 +28,9 @@ type IPageReader interface {
 	Init() error
 	Close() error
 	Read(id uint32) (IPage, error) // indexing starts from 0
+	GetStatistics() *TPageReaderStatistics
 }
 
 func MakePageReader(config TPageConfig) IPageReader {
-	return &tPageReader{config: config}
+	return &tPageReader{config: config, stats: &TPageReaderStatistics{}}
 }

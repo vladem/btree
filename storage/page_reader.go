@@ -9,6 +9,7 @@ import (
 type tPageReader struct {
 	config TPageConfig
 	file   *os.File
+	stats  *TPageReaderStatistics
 }
 
 func (r *tPageReader) Init() error {
@@ -44,6 +45,8 @@ func (r *tPageReader) Read(id uint32) (IPage, error) {
 	if uint32(read) != r.config.SizeBytes {
 		return nil, fmt.Errorf("not enough bytes to read the page, id [%v], expected [%v], read [%v]", id, r.config.SizeBytes, read)
 	}
+	r.stats.ReadCalls += 1
+	r.stats.BytesRead += uint32(read)
 	buffer := raw
 	var (
 		isLeaf         bool
@@ -98,4 +101,8 @@ func (r *tPageReader) Read(id uint32) (IPage, error) {
 		rightMostChild: rightMostChild,
 		raw:            raw,
 	}, nil
+}
+
+func (r *tPageReader) GetStatistics() *TPageReaderStatistics {
+	return r.stats
 }
