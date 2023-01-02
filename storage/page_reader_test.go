@@ -55,6 +55,12 @@ func initInternalPage(cellsCount int, rightMostChild int) []byte {
 	return page
 }
 
+func encodeVarint(val uint32) []byte {
+	buf := []byte{}
+	buf = binary.AppendVarint(buf, int64(val))
+	return buf
+}
+
 func writeAndCheck(t *testing.T, data []byte) string {
 	f, err := ioutil.TempFile(".", "")
 	if err != nil {
@@ -112,14 +118,35 @@ func TestTraverseCellsInSinglePage(t *testing.T) {
 	assert.Equal(t, []byte{'2'}, val2, "cell2, value")
 }
 
-/*
+func checkLeafCell(t *testing.T, page storage.IPage, idx uint32, keyE, valueE []byte) {
+	cell, err := page.GetCell(idx)
+	assert.Empty(t, err, "failed to get cell")
+	key, err := cell.GetKey()
+	assert.Emptyf(t, err, "failed to get cell key with error [%v]", err)
+	assert.Equal(t, keyE, key, "cell, key")
+	val, err := cell.GetValue()
+	assert.Emptyf(t, err, "failed to get cell value with error [%v]", err)
+	assert.Equal(t, valueE, val, "cell, value")
+}
+
+func checkInternalCell(t *testing.T, page storage.IPage, idx uint32, keyE []byte, valueE uint32) {
+	cell, err := page.GetCell(idx)
+	assert.Empty(t, err, "failed to get cell")
+	key, err := cell.GetKey()
+	assert.Emptyf(t, err, "failed to get cell key with error [%v]", err)
+	assert.Equal(t, keyE, key, "cell, key")
+	val, err := cell.GetValueAsUint32()
+	assert.Emptyf(t, err, "failed to get cell value with error [%v]", err)
+	assert.Equal(t, valueE, val, "cell, value")
+}
+
 func TestTraverseCellsInTwoPages(t *testing.T) {
-	cell1 := formatCell([]byte{'b'}, []byte{2})
+	cell1 := formatCell([]byte{'b'}, encodeVarint(1))
 	cell2 := formatCell([]byte{'a'}, []byte{'2'})
 	cell3 := formatCell([]byte{'c'}, []byte{'3'})
 	sizeBytes := 32
 	file := []byte{}                   // file layout: <rootPage><leafPage1><leafPage2>
-	rootPage := initInternalPage(1, 3) // rootPage layout: <header><cell1_ofs><padding><cell1>
+	rootPage := initInternalPage(1, 2) // rootPage layout: <header><cell1_ofs><padding><cell1>
 	leafPage1 := initLeafPage(1)       // leafPage1 layout: <header><cell2_ofs><padding><cell2>
 	leafPage2 := initLeafPage(1)       // leafPage2 layout: <header><cell3_ofs><padding><cell3>
 	rootPage = appendOffset(rootPage, sizeBytes-len(cell1), sizeBytes)
@@ -138,25 +165,29 @@ func TestTraverseCellsInTwoPages(t *testing.T) {
 	filePath := writeAndCheck(t, file)
 	defer os.Remove(filePath)
 
-	pageReader := MakePageReader(TPageConfig{SizeBytes: uint32(sizeBytes), FilePath: filePath})
+	pageReader := storage.MakePageReader(storage.TPageConfig{SizeBytes: uint32(sizeBytes), FilePath: filePath})
 	defer pageReader.Close()
 	err := pageReader.Init()
 	if err != nil {
 		t.Fatalf("init failed with error [%v]", err)
 	}
-	assert.False(t, pageReader.CurrentPageMeta.IsLeaf, "expected internal page")
-	assert.Equal(t, uint32(1), pageReader.CurrentPageMeta.CellsCnt, "wrong page meta")
-	cellReader, err := pageReader.NextCell()
-	assert.Emptyf(t, err, "failed to get cell1 with error [%v]", err)
-	assert.True(t, cellReader.IsLast(), "too many cells")
-	assert.Equal(t, []byte{'b'}, cellReader.GetKey(), "cell1, key")
-	assert.Equal(t, []byte{2}, cellReader.GetValue(), "cell1, value") // actually that is not required for internal pages
-	err = pageReader.NextPage()
-	if err != nil {
-		t.Fatalf("failed to read next page with error [%v]", err)
-	}
-	assert.True(t, pageReader.CurrentPageMeta.IsLeaf, "expected leaf page")
-	assert.Equal(t, uint32(1), pageReader.CurrentPageMeta.CellsCnt, "wrong page meta")
-
+	page, err := pageReader.Read(0)
+	assert.Empty(t, err, "failed to get root page")
+	assert.False(t, page.IsLeaf(), "expected internal page")
+	assert.Equal(t, uint32(2), page.GetCellsCount(), "wrong page meta")
+	checkInternalCell(t, page, 0, []byte{'b'}, 1)
+	checkInternalCell(t, page, 1, nil, 2)
+	page, err = pageReader.Read(1)
+	assert.Empty(t, err, "failed to get page")
+	assert.True(t, page.IsLeaf(), "expected leaf page")
+	assert.Equal(t, uint32(1), page.GetCellsCount(), "wrong page meta")
+	checkLeafCell(t, page, 0, []byte{'a'}, []byte{'2'})
+	page, err = pageReader.Read(2)
+	assert.Empty(t, err, "failed to get page")
+	assert.True(t, page.IsLeaf(), "expected leaf page")
+	assert.Equal(t, uint32(1), page.GetCellsCount(), "wrong page meta")
+	checkLeafCell(t, page, 0, []byte{'c'}, []byte{'3'})
+	page, err = pageReader.Read(3)
+	assert.Error(t, err, "page should not exist")
+	assert.Empty(t, page, "page should not exist")
 }
-*/
