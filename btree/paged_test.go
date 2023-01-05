@@ -107,7 +107,7 @@ func writeTree(t *testing.T) string {
 func TestGetExisting(t *testing.T) {
 	filePath := writeTree(t)
 	defer os.Remove(filePath)
-	pageReader := storage.MakePageReader(storage.TPageConfig{SizeBytes: uint32(pageSize), FilePath: filePath})
+	pageReader := storage.MakePageManager(storage.TPageConfig{SizeBytes: uint32(pageSize), FilePath: filePath})
 	defer pageReader.Close()
 	err := pageReader.Init()
 	assert.Empty(t, err)
@@ -142,7 +142,7 @@ func TestGetExisting(t *testing.T) {
 func TestGetMissing(t *testing.T) {
 	filePath := writeTree(t)
 	defer os.Remove(filePath)
-	pageReader := storage.MakePageReader(storage.TPageConfig{SizeBytes: uint32(pageSize), FilePath: filePath})
+	pageReader := storage.MakePageManager(storage.TPageConfig{SizeBytes: uint32(pageSize), FilePath: filePath})
 	defer pageReader.Close()
 	err := pageReader.Init()
 	assert.Empty(t, err)

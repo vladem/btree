@@ -2,17 +2,12 @@ package storage
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 )
 
-type tPageReader struct {
-	config TPageConfig
-	file   *os.File
-	stats  *TPageReaderStatistics
-}
-
-func (r *tPageReader) Init() error {
+func (r *tPageManager) Init() error {
 	if r.file != nil {
 		return fmt.Errorf("reader has been already initialized with file [%v]", r.file.Name())
 	}
@@ -21,10 +16,19 @@ func (r *tPageReader) Init() error {
 	if err != nil {
 		return err
 	}
+	info, err := r.file.Stat()
+	if err != nil {
+		return err
+	}
+	// todo: read file header
+	if (info.Size()-fileHeaderSize)%int64(r.config.SizeBytes) != 0 {
+		return fmt.Errorf("invalid size [%v] of the file [%v]", info.Size(), r.file.Name())
+	}
+	r.maxPageId = uint32((info.Size()-fileHeaderSize)/int64(r.config.SizeBytes) - 1)
 	return nil
 }
 
-func (r *tPageReader) Close() error {
+func (r *tPageManager) Close() error {
 	if r.file == nil {
 		return nil
 	}
@@ -33,12 +37,12 @@ func (r *tPageReader) Close() error {
 	return err
 }
 
-func (r *tPageReader) Read(id uint32) (IPage, error) {
+func (r *tPageManager) Read(id uint32) (IPage, error) {
 	if r.file == nil {
 		return nil, fmt.Errorf("failed to read page [%v], uninitialized", id)
 	}
 	raw := make([]byte, r.config.SizeBytes)
-	read, err := r.file.ReadAt(raw, int64(r.config.SizeBytes*id))
+	read, err := r.file.ReadAt(raw, int64(r.config.SizeBytes*id+fileHeaderSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the page, id [%v], error [%v]", id, err)
 	}
@@ -103,6 +107,10 @@ func (r *tPageReader) Read(id uint32) (IPage, error) {
 	}, nil
 }
 
-func (r *tPageReader) GetStatistics() *TPageReaderStatistics {
+func (r *tPageManager) NewPage(isLeaf bool, rightMostChild uint32) (IPage, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *tPageManager) GetStatistics() *tPageManagerStatistics {
 	return r.stats
 }

@@ -9,7 +9,7 @@ import (
 )
 
 type TPagedBTree struct {
-	reader storage.IPageReader
+	reader storage.IPageManager
 }
 
 func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
@@ -61,6 +61,6 @@ func (t *TPagedBTree) Put(key, value []byte) {
 	log.Fatalf("not implemented")
 }
 
-func MakePagedBTree(reader storage.IPageReader) *TPagedBTree {
+func MakePagedBTree(reader storage.IPageManager) *TPagedBTree {
 	return &TPagedBTree{reader: reader}
 }

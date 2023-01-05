@@ -2,26 +2,11 @@ package storage
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"log"
+	"sort"
 )
-
-type tCell struct {
-	key   []byte
-	value []byte
-}
-
-type tCellOffsets struct {
-	Start uint32 // bytes from the start of the page
-	End   uint32 // bytes from the start of the page
-}
-
-type tPage struct {
-	id             uint32
-	isLeaf         bool
-	cellOffsets    []tCellOffsets
-	rightMostChild uint32
-	raw            []byte
-}
 
 func (c *tCell) GetKey() ([]byte, error) {
 	return c.key, nil
@@ -84,4 +69,43 @@ func (p *tPage) GetCell(id uint32) (ICell, error) {
 		key:   curCellData[keyLenLen : keyLenLen+int(keyLen)],
 		value: curCellData[keyLenLen+int(keyLen):],
 	}, nil
+}
+
+func (p *tPage) calculateFreeOffsets() {
+	p.freeOffsets = []tCellOffsets{}
+	reserved := PageHeaderSizeBytes + (p.parent.config.MaxCellsCount * 8)
+	if len(p.cellOffsets) == 0 {
+		p.freeOffsets = append(p.freeOffsets, tCellOffsets{Start: reserved, End: p.parent.config.SizeBytes})
+		return
+	}
+	cellOffsets := make([]tCellOffsets, len(p.cellOffsets))
+	copy(cellOffsets, p.cellOffsets)
+	sort.Slice(cellOffsets, func(i, j int) bool {
+		return cellOffsets[i].Start < cellOffsets[j].Start
+	})
+	prevEnd := reserved
+	for _, cellOffsets := range cellOffsets {
+		if cellOffsets.Start != prevEnd {
+			p.freeOffsets = append(p.freeOffsets, tCellOffsets{Start: prevEnd, End: cellOffsets.Start})
+		}
+		prevEnd = cellOffsets.End
+	}
+}
+
+func (p *tPage) AddCell(cell ICell) error {
+	if p.freeOffsets == nil {
+		p.calculateFreeOffsets()
+	}
+	return errors.New("not implemented")
+}
+
+func (p *tPage) MoveCells(dst IPage, fromId uint32) error {
+	if p.freeOffsets == nil {
+		p.calculateFreeOffsets()
+	}
+	return errors.New("not implemented")
+}
+
+func (p *tPage) Flush() {
+	log.Fatal("not implemented")
 }

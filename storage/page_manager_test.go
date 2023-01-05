@@ -27,7 +27,7 @@ func TestTraverseCellsInSinglePage(t *testing.T) {
 	filePath := util.WriteAndCheck(t, pageRaw)
 	defer os.Remove(filePath)
 
-	pageReader := storage.MakePageReader(storage.TPageConfig{SizeBytes: uint32(sizeBytes), FilePath: filePath})
+	pageReader := storage.MakePageManager(storage.TPageConfig{SizeBytes: uint32(sizeBytes), FilePath: filePath})
 	defer pageReader.Close()
 	err := pageReader.Init()
 	if err != nil {
@@ -104,7 +104,7 @@ func TestTraverseCellsInTwoPages(t *testing.T) {
 	filePath := util.WriteAndCheck(t, file)
 	defer os.Remove(filePath)
 
-	pageReader := storage.MakePageReader(storage.TPageConfig{SizeBytes: uint32(sizeBytes), FilePath: filePath})
+	pageReader := storage.MakePageManager(storage.TPageConfig{SizeBytes: uint32(sizeBytes), FilePath: filePath})
 	defer pageReader.Close()
 	err := pageReader.Init()
 	if err != nil {
