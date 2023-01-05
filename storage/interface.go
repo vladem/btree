@@ -25,7 +25,7 @@ type IPage interface {
 	GetCellsCount() uint32
 	// last cell of an internal page does not have a key, rightmost child contains [lastKey, +inf)
 	GetCell(id uint32) (ICell, error) // indexing starts from 0
-	AddCell(cell ICell) error
+	AddCellBefore(key, value []byte, id uint32) error
 	MoveCells(dst IPage, fromId uint32) error
 	Flush() // persist on disk
 }
@@ -40,8 +40,4 @@ type IPageManager interface {
 
 func MakePageManager(config TPageConfig) IPageManager {
 	return &tPageManager{config: config, stats: &tPageManagerStatistics{}}
-}
-
-func MakeCell(key, value []byte) ICell {
-	return &tCell{key: key, value: value}
 }

@@ -6,14 +6,6 @@ import (
 	"testing"
 )
 
-func FormatCell(key, value []byte) []byte {
-	cell := []byte{}
-	cell = binary.AppendVarint(cell, int64(len(key)))
-	cell = append(cell, key...)
-	cell = append(cell, value...)
-	return cell
-}
-
 func AppendPadding(page []byte, size int) []byte {
 	padding := make([]byte, size)
 	page = append(page, padding...)
@@ -76,7 +68,7 @@ func addCells(page []byte, cells []TTestingCell, pageSize int) []byte {
 	cellsSize := 0
 	for i, cell := range cells {
 		end := pageSize - cellsSize
-		encoded := FormatCell(cell.Key, cell.Value)
+		encoded := EncodeCell(cell.Key, cell.Value)
 		cellsSize += len(encoded)
 		page = AppendOffset(page, pageSize-cellsSize, end)
 		encodedCells[i] = encoded

@@ -27,8 +27,8 @@ func TestCompareGreaterBySize(t *testing.T) {
 }
 
 func TestAddCells(t *testing.T) {
-	cell1Raw := FormatCell([]byte{'a'}, []byte{'1'})
-	cell2Raw := FormatCell([]byte{'b'}, []byte{'2'})
+	cell1Raw := EncodeCell([]byte{'a'}, []byte{'1'})
+	cell2Raw := EncodeCell([]byte{'b'}, []byte{'2'})
 	sizeBytes := 32
 	expectedPage := InitLeafPage(2) // page layout: <header><cell1_ofs><cell2_ofs><padding><cell2><cell1>
 	expectedPage = AppendOffset(expectedPage, sizeBytes-len(cell1Raw), sizeBytes)

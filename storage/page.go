@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"log"
 	"sort"
+
+	"github.com/vladem/btree/util"
 )
+
+const maxUint32 int64 = (1 << 32) - 1
 
 func (c *tCell) GetKey() ([]byte, error) {
 	return c.key, nil
@@ -18,7 +22,6 @@ func (c *tCell) GetValue() ([]byte, error) {
 
 func (c *tCell) GetValueAsUint32() (uint32, error) {
 	value, read := binary.Varint(c.value)
-	const maxUint32 int64 = (1 << 32) - 1
 	if read != len(c.value) || value < 0 || value > maxUint32 {
 		return 0, fmt.Errorf("failed to parse child id, parser ret [%v/%v]", value, read)
 	}
@@ -92,20 +95,64 @@ func (p *tPage) calculateFreeOffsets() {
 	}
 }
 
-func (p *tPage) AddCell(cell ICell) error {
+func (p *tPage) defragment() {
+}
+
+func (p *tPage) AddCellBefore(key, value []byte, id uint32) error {
+	if uint32(len(p.cellOffsets)) == p.parent.config.MaxCellsCount {
+		return errors.New("mac cells count reached")
+	}
+	if id > uint32(len(p.cellOffsets)) {
+		return errors.New("no such id")
+	}
 	if p.freeOffsets == nil {
 		p.calculateFreeOffsets()
 	}
-	return errors.New("not implemented")
+	encodedCell := util.EncodeCell(key, value)
+	if int64(len(encodedCell)) > maxUint32 {
+		return errors.New("encoded cell is too big")
+	}
+	freeSpaceBytes := uint32(0)
+	var i int
+	for i = len(p.freeOffsets) - 1; i >= 0; i-- {
+		intervalLen := p.freeOffsets[i].End - p.freeOffsets[i].Start
+		if intervalLen >= uint32(len(encodedCell)) {
+			break
+		}
+		freeSpaceBytes += intervalLen
+	}
+	if i == -1 {
+		if freeSpaceBytes < uint32(len(encodedCell)) {
+			return errors.New("no space left")
+		}
+		p.defragment()
+		i = 0
+	}
+	newCellOffsets := tCellOffsets{
+		Start: p.freeOffsets[i].End - uint32(len(encodedCell)),
+		End:   p.freeOffsets[i].End,
+	}
+	if newCellOffsets.Start == p.freeOffsets[i].Start {
+		p.freeOffsets = append(p.freeOffsets[:i], p.freeOffsets[i+1:]...)
+	} else {
+		p.freeOffsets[i].End = newCellOffsets.Start
+	}
+	copy(p.raw[newCellOffsets.Start:newCellOffsets.End], encodedCell)
+	if id == uint32(len(p.cellOffsets)) {
+		p.cellOffsets = append(p.cellOffsets, newCellOffsets)
+		return nil
+	}
+	p.cellOffsets = append(p.cellOffsets[:id+1], p.cellOffsets[id:]...)
+	p.cellOffsets[id] = newCellOffsets
+	// todo: why not encode cellOffsets here? (put them to raw)
+	return nil
 }
 
 func (p *tPage) MoveCells(dst IPage, fromId uint32) error {
-	if p.freeOffsets == nil {
-		p.calculateFreeOffsets()
-	}
 	return errors.New("not implemented")
 }
 
 func (p *tPage) Flush() {
+	// todo: cellOffsets should be encoded here
 	log.Fatal("not implemented")
 }

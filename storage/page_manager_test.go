@@ -11,8 +11,8 @@ import (
 )
 
 func TestTraverseCellsInSinglePage(t *testing.T) {
-	cell1Raw := util.FormatCell([]byte{'a'}, []byte{'1'})
-	cell2Raw := util.FormatCell([]byte{'b'}, []byte{'2'})
+	cell1Raw := util.EncodeCell([]byte{'a'}, []byte{'1'})
+	cell2Raw := util.EncodeCell([]byte{'b'}, []byte{'2'})
 	sizeBytes := 32
 	pageRaw := util.InitLeafPage(2) // page layout: <header><cell1_ofs><cell2_ofs><padding><cell2><cell1>
 	pageRaw = util.AppendOffset(pageRaw, sizeBytes-len(cell1Raw), sizeBytes)
@@ -80,9 +80,9 @@ func checkInternalCell(t *testing.T, page storage.IPage, idx uint32, keyE []byte
 }
 
 func TestTraverseCellsInTwoPages(t *testing.T) {
-	cell1 := util.FormatCell([]byte{'b'}, util.EncodeVarint(1))
-	cell2 := util.FormatCell([]byte{'a'}, []byte{'2'})
-	cell3 := util.FormatCell([]byte{'c'}, []byte{'3'})
+	cell1 := util.EncodeCell([]byte{'b'}, util.EncodeVarint(1))
+	cell2 := util.EncodeCell([]byte{'a'}, []byte{'2'})
+	cell3 := util.EncodeCell([]byte{'c'}, []byte{'3'})
 	sizeBytes := 32
 	file := []byte{}                        // file layout: <rootPage><leafPage1><leafPage2>
 	rootPage := util.InitInternalPage(1, 2) // rootPage layout: <header><cell1_ofs><padding><cell1>

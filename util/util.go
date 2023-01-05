@@ -1,5 +1,7 @@
 package util
 
+import "encoding/binary"
+
 /*
 Compares two byte arrays, returns integer:
 if lhs < rhs:	-1
@@ -28,4 +30,12 @@ func Compare(lhs, rhs []byte) int8 {
 		return -1
 	}
 	return 0
+}
+
+func EncodeCell(key, value []byte) []byte {
+	cell := []byte{}
+	cell = binary.AppendVarint(cell, int64(len(key)))
+	cell = append(cell, key...)
+	cell = append(cell, value...)
+	return cell
 }
