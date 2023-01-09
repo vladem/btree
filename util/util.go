@@ -2,6 +2,8 @@ package util
 
 import "encoding/binary"
 
+const MaxUint32 uint32 = (1 << 32) - 1
+
 /*
 Compares two byte arrays, returns integer:
 if lhs < rhs:	-1

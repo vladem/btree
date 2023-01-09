@@ -1,6 +1,6 @@
 package storage
 
-const PageHeaderSizeBytes = 13 // version [4] + isLeaf [1] + cellsCount [4] + rightmostChild [4]
+const PageHeaderSizeBytes = 13 // flags [1] + cellsCount [4] + rightmostChild [4]
 
 type TPageConfig struct {
 	SizeBytes     uint32 // page size is limited with ~4GB
@@ -26,7 +26,6 @@ type IPage interface {
 	// last cell of an internal page does not have a key, rightmost child contains [lastKey, +inf)
 	GetCell(id uint32) (ICell, error) // indexing starts from 0
 	AddCellBefore(key, value []byte, id uint32) error
-	MoveCells(dst IPage, fromId uint32) error
 	Flush() // persist on disk
 }
 

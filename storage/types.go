@@ -12,11 +12,6 @@ type tPageManager struct {
 	fileHeader *tFileHeader
 }
 
-type tCell struct {
-	key   []byte
-	value []byte
-}
-
 type tCellOffsets struct {
 	Start uint32 // bytes from the start of the page
 	End   uint32 // bytes from the start of the page
@@ -32,7 +27,23 @@ type tPage struct {
 	parent         *tPageManager
 }
 
-type tFileHeader struct { // store on disk at most N free page ids and an overflow flag
-	version_format uint32
-	freePages      []uint32
+type TTuple struct {
+	persisted bool
+	pageId    uint32
+	offsets   tCellOffsets
+	key       []byte
+	value     []byte
+}
+
+type TNode struct {
+	Tuples []TTuple
+	page   *tPage
+}
+
+type INodeStorage interface {
+	SetRootNode(newRoot *TNode) error
+	RootNode() (*TNode, error)
+	AllocateNode(isLeaf bool) (*TNode, error)
+	LoadNode(id uint32) (*TNode, error)
+	SaveNode(node *TNode) error
 }

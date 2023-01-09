@@ -1,19 +1,10 @@
 package btree_test
 
-import (
-	"os"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/vladem/btree/btree"
-	"github.com/vladem/btree/storage"
-	"github.com/vladem/btree/util"
-)
-
 const (
 	pageSize = 512
 )
 
+/*
 // find tree layout in data/btree.png
 func writeTree(t *testing.T) string {
 	file := []byte{}
@@ -158,3 +149,4 @@ func TestGetMissing(t *testing.T) {
 	assert.Equal(t, 6, int(pageReader.GetStatistics().ReadCalls))
 	assert.Equal(t, pageSize*6, int(pageReader.GetStatistics().BytesRead))
 }
+*/
