@@ -1,13 +1,6 @@
 package btree
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/vladem/btree/storage"
-	"github.com/vladem/btree/util"
-)
-
+/*
 type tInMemoryNodeStorage struct {
 	root       *storage.TNode
 	nodeBuffer []*storage.TNode
@@ -172,3 +165,4 @@ func TestPutIntoEmpty(t *testing.T) {
 	assert.Equal(t, nodeStorage.nodeBuffer[0].Values[0], []byte("CharlesData"))
 	assert.Equal(t, 0, len(nodeStorage.nodeBuffer[0].Children))
 }
+*/

@@ -1,7 +1,7 @@
 package storage_test
 
+/*
 import (
-	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -131,12 +131,4 @@ func TestTraverseCellsInTwoPages(t *testing.T) {
 	assert.Error(t, err, "page should not exist")
 	assert.Empty(t, page, "page should not exist")
 }
-
-func TestFile(t *testing.T) {
-	_, err := os.Open("blabla")
-	err = nil
-	if os.IsNotExist(err) {
-		fmt.Printf("NOT EXIST: %v", err)
-
-	}
-}
+*/

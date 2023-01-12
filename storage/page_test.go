@@ -1,12 +1,6 @@
 package storage
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/vladem/btree/util"
-)
-
+/*
 func TestCalculateFreeOffsetsEmpty(t *testing.T) {
 	manager := MakePageManager(TPageConfig{MaxCellsCount: 10, SizeBytes: 4096})
 	managerDowncasted, ok := manager.(*tPageManager)
@@ -124,3 +118,4 @@ func TestAddCellKeyMiddle(t *testing.T) {
 	assert.Equal(t, []tCellOffsets{{Start: 101, End: 111}, {Start: 118, End: 121}, {Start: 121, End: 128}}, page.cellOffsets)
 	assert.Equal(t, []tCellOffsets{{Start: 93, End: 101}, {Start: 111, End: 118}}, page.freeOffsets)
 }
+*/

@@ -56,19 +56,13 @@ func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
 }
 
 func (t *TPagedBTree) Put(key, value []byte) error {
-	root, err := t.nodeStorage.RootNode()
-	if err != nil {
-		return err
-	}
-	if len(root.Children) == t.maxKeysCount {
-		newRoot, err := t.nodeStorage.AllocateNode(false)
+	root := t.nodeStorage.RootNode()
+	if root.KeyCount() == t.maxKeysCount {
+		newRoot, err := t.nodeStorage.AllocateRootNode()
 		if err != nil {
 			return err
 		}
-		if err := t.nodeStorage.SetRootNode(newRoot); err != nil {
-			return err
-		}
-		newRoot.Children = append(newRoot.Children, root.Id)
+		newRoot.ReplaceChildren([]uint32{root.Id()})
 		if err := t.splitChild(newRoot, root); err != nil {
 			return err
 		}
@@ -83,78 +77,65 @@ func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount int) *TPagedB
 	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: maxKeysCount}
 }
 
-func (t *TPagedBTree) splitChild(parent, child *storage.TNode) error {
+func (t *TPagedBTree) splitChild(parent, child storage.INode) error {
 	lhs := child
-	rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf)
+	rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf())
 	if err != nil {
 		return err
 	}
-	pivotKeyIdx := len(lhs.Keys) / 2
-	pivotKey := lhs.Keys[pivotKeyIdx]
-	i := len(parent.Keys) - 1
-	for ; i >= 0 && util.Compare(pivotKey, parent.Keys[i]) == -1; i-- {
+	pivotKeyIdx := lhs.KeyCount() / 2
+	pivotKey := lhs.Key(pivotKeyIdx)
+	i := parent.KeyCount() - 1
+	for ; i >= 0 && util.Compare(pivotKey, parent.Key(i)) == -1; i-- {
 	}
 	i += 1
-	if i == len(parent.Keys) {
-		parent.Keys = append(parent.Keys, pivotKey)
-		parent.Children = append(parent.Children, rhs.Id)
+	parent.InsertKey(pivotKey, i)
+	if lhs.IsLeaf() {
+		rhs.ReplaceKeyValues(lhs.KeyValues(pivotKeyIdx, lhs.KeyCount()))
+		lhs.TruncateKeys(pivotKeyIdx)
 	} else {
-		parent.Keys = append(parent.Keys[:i+1], parent.Keys[i:]...)
-		parent.Keys[i] = pivotKey
-		parent.Children = append(parent.Children[:i+2], parent.Children[i+1:]...)
-		parent.Children[i+1] = rhs.Id
+		rhs.ReplaceKeys(lhs.Keys(pivotKeyIdx, lhs.KeyCount()))
+		lhs.TruncateKeys(pivotKeyIdx)
+		rhsChildren := []uint32{util.MaxUint32}
+		rhsChildren = append(rhsChildren, lhs.Children(pivotKeyIdx+1, lhs.KeyCount()+1)...)
+		rhs.ReplaceChildren(rhsChildren)
+		lhs.TruncateChildren(pivotKeyIdx + 1)
 	}
-	rhs.Keys = append(rhs.Keys, lhs.Keys[pivotKeyIdx:]...)
-	lhs.Keys = lhs.Keys[:pivotKeyIdx]
-	if !lhs.IsLeaf {
-		rhs.Children = append(rhs.Children, util.MaxUint32)
-		rhs.Children = append(rhs.Children, lhs.Children[pivotKeyIdx+1:]...)
-		lhs.Children = lhs.Children[:pivotKeyIdx+1]
-	}
-	// todo move values too
-	if err := t.nodeStorage.SaveNode(parent); err != nil {
+	if err := parent.Save(); err != nil {
 		return err
 	}
-	if err := t.nodeStorage.SaveNode(lhs); err != nil {
+	if err := lhs.Save(); err != nil {
 		return err
 	}
-	if err := t.nodeStorage.SaveNode(rhs); err != nil {
+	if err := rhs.Save(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *TPagedBTree) insertNonFull(node *storage.TNode, key, value []byte) error {
-	i := len(node.Keys) - 1
+func (t *TPagedBTree) insertNonFull(node storage.INode, key, value []byte) error {
+	i := node.KeyCount() - 1
 	lastCompare := int8(1)
 	for ; i >= 0; i-- {
-		lastCompare = util.Compare(key, node.Keys[i])
+		lastCompare = util.Compare(key, node.Key(i))
 		if lastCompare != -1 {
 			break
 		}
 	}
-	if node.IsLeaf && lastCompare == 0 {
-		node.Values[i] = value
-		return t.nodeStorage.SaveNode(node)
+	if node.IsLeaf() && lastCompare == 0 {
+		node.UpdateValue(i, value)
+		return node.Save()
 	}
 	i += 1
-	if node.IsLeaf {
-		if i == len(node.Keys) {
-			node.Keys = append(node.Keys, key)
-			node.Values = append(node.Values, value)
-		} else {
-			node.Keys = append(node.Keys[:i+1], node.Keys[i:]...)
-			node.Keys[i] = key
-			node.Values = append(node.Values[:i+1], node.Values[i:]...)
-			node.Values[i] = value
-		}
-		return t.nodeStorage.SaveNode(node)
+	if node.IsLeaf() {
+		node.InsertKeyValue(key, value, i)
+		return node.Save()
 	}
-	child, err := t.nodeStorage.LoadNode(node.Children[i])
+	child, err := t.nodeStorage.LoadNode(node.Child(i))
 	if err != nil {
 		return err
 	}
-	if len(child.Children) == t.maxKeysCount {
+	if child.KeyCount() == t.maxKeysCount {
 		if err := t.splitChild(node, child); err != nil {
 			return err
 		}

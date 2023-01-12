@@ -10,22 +10,6 @@ import (
 	"github.com/vladem/btree/util"
 )
 
-func (c *tCell) GetKey() ([]byte, error) {
-	return c.key, nil
-}
-
-func (c *tCell) GetValue() ([]byte, error) {
-	return c.value, nil
-}
-
-func (c *tCell) GetValueAsUint32() (uint32, error) {
-	value, read := binary.Varint(c.value)
-	if read != len(c.value) || value < 0 || value > int64(util.MaxUint32) {
-		return 0, fmt.Errorf("failed to parse child id, parser ret [%v/%v]", value, read)
-	}
-	return uint32(value), nil
-}
-
 func (p *tPage) GetId() uint32 {
 	return p.id
 }
