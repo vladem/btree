@@ -1,13 +1,19 @@
 package storage
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"errors"
 
+	"github.com/vladem/btree/util"
+)
+
+/******************* PUBLIC *******************/
 func (p *tNode) IsLeaf() bool {
 	return p.isLeaf
 }
 
 func (p *tNode) KeyCount() int {
-	return len(p.offsets)
+	return len(p.tuples)
 }
 
 func (p *tNode) Id() uint32 {
@@ -16,16 +22,16 @@ func (p *tNode) Id() uint32 {
 
 // unsafe
 func (p *tNode) Key(id int) []byte {
-	sOffset := p.offsets[id].Start
-	eOffset := p.offsets[id].End
+	sOffset := p.tuples[id].offsets.Start
+	eOffset := p.tuples[id].offsets.End
 	curCellData := p.raw[sOffset:eOffset]
 	keyLen := binary.BigEndian.Uint32(curCellData[:4])
 	return curCellData[4 : 4+keyLen]
 }
 
 func (p *tNode) Value(id int) []byte {
-	sOffset := p.offsets[id].Start
-	eOffset := p.offsets[id].End
+	sOffset := p.tuples[id].offsets.Start
+	eOffset := p.tuples[id].offsets.End
 	curCellData := p.raw[sOffset:eOffset]
 	keyLen := binary.BigEndian.Uint32(curCellData[:4])
 	return curCellData[4+keyLen : 0]
@@ -57,15 +63,8 @@ func (p *tNode) KeyValues(idStart, idEnd int) ([][]byte, [][]byte) {
 	return p.Keys(idStart, idEnd), values
 }
 
-func (p *tNode) InsertKey(key []byte, idx int) {
-	if idx == parent.KeyCount() {
-		p.Keys = append(parent.Keys, pivotKey)
-	} else {
-		parent.Keys = append(parent.Keys[:idx+1], parent.Keys[idx:]...)
-		parent.Keys[i] = pivotKey
-		parent.Children = append(parent.Children[:i+2], parent.Children[i+1:]...)
-		parent.Children[i+1] = rhs.Id
-	}
+func (node *tNode) InsertKey(key []byte, idx int) {
+	node.InsertKeyValue(key, nil, idx)
 }
 
 func (p *tNode) InsertChild(childId uint32, idx int) {
@@ -77,42 +76,81 @@ func (p *tNode) InsertChild(childId uint32, idx int) {
 	p.children[idx] = childId
 }
 
-func (p *tNode) ReplaceKeys(keys [][]byte) {
-
-}
-
-func (p *tNode) ReplaceChildren(childIds []uint32) {
-
-}
-
-func (p *tNode) TruncateKeys(tillIdx int) {
-
-}
-
-func (p *tNode) TruncateChildren(tillIdx int) {
-
-}
-
-func (p *tNode) InsertKeyValue(key []byte, value []byte, idx int) {
-	if i == len(node.Keys) {
-		node.Keys = append(node.Keys, key)
-		node.Values = append(node.Values, value)
-	} else {
-		node.Keys = append(node.Keys[:i+1], node.Keys[i:]...)
-		node.Keys[i] = key
-		node.Values = append(node.Values[:i+1], node.Values[i:]...)
-		node.Values[i] = value
+func (node *tNode) ReplaceKeys(keys [][]byte) {
+	node.tuples = []*tTuple{}
+	for _, key := range keys {
+		node.tuples = append(node.tuples, makeTuple(key, nil))
 	}
 }
 
-func (p *tNode) ReplaceKeyValues(keys, values [][]byte) {
-
+func (node *tNode) ReplaceChildren(childIds []uint32) {
+	node.children = childIds
 }
 
-func (p *tNode) UpdateValue(idx int, value []byte) {
-
+func (node *tNode) TruncateKeys(tillIdx int) {
+	node.tuples = node.tuples[:tillIdx]
 }
 
-func (p *tNode) Save() error {
+func (node *tNode) TruncateChildren(tillIdx int) {
+	node.children = node.children[:tillIdx]
+}
 
+func (node *tNode) InsertKeyValue(key []byte, value []byte, idx int) {
+	tuple := makeTuple(key, value)
+	if idx == node.KeyCount() {
+		node.tuples = append(node.tuples, tuple)
+		return
+	}
+	node.tuples = append(node.tuples[:idx+1], node.tuples[idx:]...)
+	node.tuples[idx] = tuple
+}
+
+func (node *tNode) ReplaceKeyValues(keys, values [][]byte) {
+	node.tuples = []*tTuple{}
+	for i, key := range keys {
+		node.tuples = append(node.tuples, makeTuple(key, values[i]))
+	}
+}
+
+func (node *tNode) UpdateValue(idx int, value []byte) {
+	node.tuples[idx].offsets = nil
+	node.tuples[idx].value = value
+}
+
+func (node *tNode) Save() error {
+	if node.parent.file == nil {
+		return errors.New("already closed")
+	}
+	encodedTuples := make([][]byte, len(node.tuples))
+	for i, tuple := range node.tuples {
+		// stopped here
+		// need to encode t
+		encodedTuples[i] = util.EncodeCell(tuple.key, tuple.value)
+	}
+}
+
+/******************* PRIVATE *******************/
+func makeNode(nodeId uint32, isLeaf bool, parent *tOnDiskNodeStorage) *tNode {
+	var children []uint32
+	if !isLeaf {
+		children = []uint32{}
+	}
+	return &tNode{
+		id:       nodeId,
+		isLeaf:   isLeaf,
+		children: children,
+		parent:   parent,
+		tuples:   []*tTuple{},
+	}
+}
+
+func makeTuple(key, value []byte) *tTuple {
+	return &tTuple{
+		key:   key,
+		value: value,
+	}
+}
+
+func (node *tNode) defragment() error {
+	return errors.New("not implemented")
 }

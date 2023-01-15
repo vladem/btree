@@ -61,18 +61,19 @@ type tCellOffsets struct {
 }
 
 type tTuple struct {
-	offsets tCellOffsets
+	offsets *tCellOffsets
 	key     []byte
-	value   []byte // may be nil?
+	value   []byte
 }
 
 type tNode struct {
-	id          uint32
-	isLeaf      bool
-	offsets     []tCellOffsets
-	children    []uint32
+	id     uint32
+	isLeaf bool
+	parent *tOnDiskNodeStorage
+	tuples []*tTuple
+	// only set for internal nodes
+	children []uint32
+	// only set for nodes loaded from disk (or saved)
 	raw         []byte
 	freeOffsets []tCellOffsets
-	parent      *tOnDiskNodeStorage
-	newTuples   []tTuple
 }

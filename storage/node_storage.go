@@ -84,11 +84,11 @@ func (s *tOnDiskNodeStorage) allocateNode(isLeaf bool) (*tNode, error) {
 	}
 	nodeId := s.freePageIds[0]
 	s.freePageIds = s.freePageIds[1:]
-	// todo: allocate raw buffer?
-	return &tNode{id: nodeId, isLeaf: isLeaf}, nil
+	return makeNode(nodeId, isLeaf, s), nil
 }
 
 func (s *tOnDiskNodeStorage) loadNode(id uint32) (*tNode, error) {
+	// todo: free offsets should be calculated here
 	/*
 		if s.file == nil {
 			log.Fatalf("failed to read page [%v], uninitialized", id)
@@ -162,7 +162,13 @@ func (s *tOnDiskNodeStorage) loadNode(id uint32) (*tNode, error) {
 }
 
 func (s *tOnDiskNodeStorage) allocateRootNode() (*tNode, error) {
-	return nil, errors.New("not implemented")
+	newRoot, err := s.allocateNode(false)
+	if err != nil {
+		return nil, err
+	}
+	newRoot.ReplaceChildren([]uint32{s.rootNode.Id()})
+	s.rootNode = newRoot
+	return newRoot, nil
 }
 
 func (s *tOnDiskNodeStorage) readHeader() error {
@@ -196,9 +202,9 @@ func (s *tOnDiskNodeStorage) writeHeader() error {
 
 func (s *tOnDiskNodeStorage) allocateNewBatch() error {
 	batchSize := 100
-	pages := make([]byte, pageHeaderSizeBytes*batchSize)
+	pages := make([]byte, int(s.config.PageSizeBytes)*batchSize)
 	written, err := s.file.WriteAt(pages, int64(fileHeaderSizeBytes+s.nextPageId))
-	if err != nil || written != int(pageHeaderSizeBytes*batchSize) {
+	if err != nil || written != int(s.config.PageSizeBytes)*batchSize {
 		return fmt.Errorf("failed to allocate new batch, err [%v], written [%v]", err, written)
 	}
 	for i := s.nextPageId; i < s.nextPageId+uint32(batchSize); i++ {

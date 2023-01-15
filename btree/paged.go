@@ -62,7 +62,6 @@ func (t *TPagedBTree) Put(key, value []byte) error {
 		if err != nil {
 			return err
 		}
-		newRoot.ReplaceChildren([]uint32{root.Id()})
 		if err := t.splitChild(newRoot, root); err != nil {
 			return err
 		}

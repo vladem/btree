@@ -77,9 +77,6 @@ func (p *tPage) calculateFreeOffsets() {
 	}
 }
 
-func (p *tPage) defragment() {
-}
-
 func (p *tPage) AddCellBefore(key, value []byte, id uint32) error {
 	if uint32(len(p.cellOffsets)) == p.parent.config.MaxCellsCount {
 		return errors.New("mac cells count reached")
