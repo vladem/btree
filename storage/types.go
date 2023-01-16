@@ -11,10 +11,10 @@ type TConfig struct {
 	MaxCellsCount uint32
 }
 
-// type TPageManagerStatistics struct {
-// 	ReadCalls uint32
-// 	BytesRead uint32
-// }
+type TStorageStatistics struct {
+	ReadCalls uint32
+	BytesRead uint32
+}
 
 type INode interface {
 	IsLeaf() bool
@@ -44,7 +44,7 @@ type INodeStorage interface {
 	AllocateRootNode() (INode, error)
 	LoadNode(id uint32) (INode, error)
 	Close() error
-	//GetStatistics() *TPageManagerStatistics
+	Statistics() *TStorageStatistics
 }
 
 type tOnDiskNodeStorage struct {
@@ -53,6 +53,7 @@ type tOnDiskNodeStorage struct {
 	file        *os.File
 	nextPageId  uint32
 	freePageIds []uint32
+	stats       *TStorageStatistics
 }
 
 type tCellOffsets struct {

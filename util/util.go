@@ -36,8 +36,10 @@ func Compare(lhs, rhs []byte) int8 {
 
 func EncodeCell(key, value []byte) []byte {
 	cell := []byte{}
-	cell = binary.AppendVarint(cell, int64(len(key)))
+	cell = binary.BigEndian.AppendUint32(cell, uint32(len(key)))
 	cell = append(cell, key...)
-	cell = append(cell, value...)
+	if value != nil {
+		cell = append(cell, value...)
+	}
 	return cell
 }

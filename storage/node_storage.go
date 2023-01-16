@@ -35,10 +35,28 @@ func (s *tOnDiskNodeStorage) Close() error {
 	return err
 }
 
+func (s *tOnDiskNodeStorage) Statistics() *TStorageStatistics {
+	return s.stats
+}
+
+func fileExists(filePath string) (bool, error) {
+	info, err := os.Stat(filePath)
+	if err == nil {
+		return !info.IsDir(), nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
 func MakeNodeStorage(config TConfig) (INodeStorage, error) {
-	file, err := os.OpenFile(config.FilePath, os.O_RDWR, 0)
-	if os.IsNotExist(err) {
-		file, err = os.Create(config.FilePath)
+	exists, err := fileExists(config.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		file, err := os.Create(config.FilePath)
 		if err != nil {
 			return nil, err
 		}
@@ -47,6 +65,7 @@ func MakeNodeStorage(config TConfig) (INodeStorage, error) {
 			file:        file,
 			nextPageId:  0,
 			freePageIds: []uint32{},
+			stats:       &TStorageStatistics{},
 		}
 		root, err := storage.allocateRootNode()
 		if err != nil {
@@ -56,6 +75,7 @@ func MakeNodeStorage(config TConfig) (INodeStorage, error) {
 		storage.rootNode = root
 		return storage, nil
 	}
+	file, err := os.OpenFile(config.FilePath, os.O_RDWR, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +83,7 @@ func MakeNodeStorage(config TConfig) (INodeStorage, error) {
 		config:      config,
 		file:        file,
 		freePageIds: []uint32{},
+		stats:       &TStorageStatistics{},
 	}
 	err = storage.readHeader()
 	if err != nil {
@@ -72,7 +93,7 @@ func MakeNodeStorage(config TConfig) (INodeStorage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return storage, nil
 }
 
 /******************* PRIVATE *******************/
@@ -88,77 +109,20 @@ func (s *tOnDiskNodeStorage) allocateNode(isLeaf bool) (*tNode, error) {
 }
 
 func (s *tOnDiskNodeStorage) loadNode(id uint32) (*tNode, error) {
-	// todo: free offsets should be calculated here
-	/*
-		if s.file == nil {
-			log.Fatalf("failed to read page [%v], uninitialized", id)
-		}
-		raw := make([]byte, r.config.SizeBytes)
-		read, err := r.file.ReadAt(raw, int64(r.config.SizeBytes*id+fileHeaderSize))
-		if err != nil {
-			return nil, fmt.Errorf("failed to read the page, id [%v], error [%v]", id, err)
-		}
-		if uint32(read) != r.config.SizeBytes {
-			return nil, fmt.Errorf("not enough bytes to read the page, id [%v], expected [%v], read [%v]", id, r.config.SizeBytes, read)
-		}
-		r.stats.ReadCalls += 1
-		r.stats.BytesRead += uint32(read)
-		buffer := raw
-		var (
-			isLeaf         bool
-			cellsCnt       int64
-			rightMostChild uint32
-		)
-		version, read := binary.Varint(buffer)
-		if read <= 0 {
-			return nil, fmt.Errorf("failed to parse header, version varint, pageId [%v], ret [%v]", id, read)
-		}
-		if version != 1 {
-			return nil, fmt.Errorf("unsupported page version [%v], pageId [%v]", version, id)
-		}
-		buffer = buffer[read:]
-		if len(buffer) == 0 {
-			return nil, fmt.Errorf("failed to parse header, node type, pageId [%v]", id)
-		}
-		isLeaf = buffer[0] != 0
-		buffer = buffer[1:]
-		cellsCnt, read = binary.Varint(buffer)
-		if read <= 0 {
-			return nil, fmt.Errorf("failed to parse header, cellsCnt varint, ret [%v], pageId [%v]", read, id)
-		}
-		buffer = buffer[read:]
-		if !isLeaf {
-			rightMostChildInt, read := binary.Varint(buffer)
-			if read <= 0 {
-				return nil, fmt.Errorf("failed to parse header, rightmost child varint, ret [%v], pageId [%v]", read, id)
-			}
-			rightMostChild = uint32(rightMostChildInt)
-			buffer = buffer[read:]
-		}
-		offsets := []tCellOffsets{}
-		for i := 0; i < int(cellsCnt); i++ {
-			var sOffset, eOffset int64
-			sOffset, read = binary.Varint(buffer)
-			if read <= 0 {
-				return nil, fmt.Errorf("failed to parse start offset, i [%v], ret [%v], pageId [%v]", i, read, id)
-			}
-			buffer = buffer[read:]
-			eOffset, read = binary.Varint(buffer)
-			if read <= 0 {
-				return nil, fmt.Errorf("failed to parse end offset, i [%v], ret [%v], pageId [%v]", i, read, id)
-			}
-			buffer = buffer[read:]
-			offsets = append(offsets, tCellOffsets{Start: uint32(sOffset), End: uint32(eOffset)})
-		}
-		return &tPage{
-			id:             id,
-			isLeaf:         isLeaf,
-			cellOffsets:    offsets,
-			rightMostChild: rightMostChild,
-			raw:            raw,
-		}, nil
-	*/
-	return nil, errors.New("not implemented")
+	if s.file == nil {
+		return nil, errors.New("already closed")
+	}
+	raw := make([]byte, s.config.PageSizeBytes)
+	read, err := s.file.ReadAt(raw, int64(s.config.PageSizeBytes*id+fileHeaderSizeBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the page, id [%v], error [%v]", id, err)
+	}
+	if uint32(read) != s.config.PageSizeBytes {
+		return nil, fmt.Errorf("not enough bytes to read the page, id [%v], expected [%v], read [%v]", id, s.config.PageSizeBytes, read)
+	}
+	s.stats.ReadCalls += 1
+	s.stats.BytesRead += uint32(read)
+	return makeNodeFromRaw(id, raw, s)
 }
 
 func (s *tOnDiskNodeStorage) allocateRootNode() (*tNode, error) {
@@ -166,8 +130,16 @@ func (s *tOnDiskNodeStorage) allocateRootNode() (*tNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	newRoot.ReplaceChildren([]uint32{s.rootNode.Id()})
+	if s.rootNode != nil {
+		newRoot.ReplaceChildren([]uint32{s.rootNode.Id()})
+	} else {
+		newRoot.isLeaf = true
+	}
 	s.rootNode = newRoot
+	err = s.writeHeader()
+	if err != nil {
+		return nil, err
+	}
 	return newRoot, nil
 }
 
@@ -182,7 +154,7 @@ func (s *tOnDiskNodeStorage) readHeader() error {
 	}
 	layoutVersion := binary.BigEndian.Uint32(header[:4])
 	if layoutVersion != 1 {
-		return fmt.Errorf("usupported layout version", layoutVersion)
+		return fmt.Errorf("usupported layout version [%v]", layoutVersion)
 	}
 	rootNodeId := binary.BigEndian.Uint32(header[4:])
 	s.rootNode, err = s.loadNode(rootNodeId)
@@ -194,8 +166,8 @@ func (s *tOnDiskNodeStorage) readHeader() error {
 
 func (s *tOnDiskNodeStorage) writeHeader() error {
 	buf := []byte{}
-	binary.BigEndian.PutUint32(buf, FileLayoutVersion)
-	binary.BigEndian.PutUint32(buf, s.rootNode.id)
+	buf = binary.BigEndian.AppendUint32(buf, FileLayoutVersion)
+	buf = binary.BigEndian.AppendUint32(buf, s.rootNode.id)
 	_, err := s.file.WriteAt(buf, 0)
 	return err
 }
