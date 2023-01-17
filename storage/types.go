@@ -12,8 +12,10 @@ type TConfig struct {
 }
 
 type TStorageStatistics struct {
-	ReadCalls uint32
-	BytesRead uint32
+	ReadCalls    uint32
+	BytesRead    uint32
+	WriteCalls   uint32
+	BytesWritten uint32
 }
 
 type INode interface {

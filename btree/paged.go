@@ -69,11 +69,11 @@ func (t *TPagedBTree) Put(key, value []byte) error {
 	return t.insertNonFull(root, key, value)
 }
 
-func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount int) *TPagedBTree {
+func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount uint32) *TPagedBTree {
 	if maxKeysCount%2 != 1 {
 		return nil
 	}
-	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: maxKeysCount}
+	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: int(maxKeysCount)}
 }
 
 func (t *TPagedBTree) splitChild(parent, child storage.INode) error {

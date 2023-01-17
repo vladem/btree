@@ -126,7 +126,52 @@ func (node *tNode) Save() error {
 	if node.raw == nil {
 		return node.writeNewNode()
 	}
-	return errors.New("not implemented")
+	defragment := false
+	newTuples := []*tTuple{}
+	encoded := [][]byte{}
+	for _, tuple := range node.tuples {
+		if tuple.offsets != nil {
+			continue
+		}
+		encodedTuple := util.EncodeCell(tuple.key, tuple.value)
+		newTuples = append(newTuples, tuple)
+		encoded = append(encoded, encodedTuple)
+		var i int
+		for i = len(node.freeOffsets) - 1; i >= 0; i-- {
+			intervalLen := node.freeOffsets[i].End - node.freeOffsets[i].Start
+			if intervalLen >= uint32(len(encodedTuple)) {
+				break
+			}
+		}
+		if i == -1 {
+			defragment = true
+			break
+		}
+		newCellOffsets := tCellOffsets{
+			Start: node.freeOffsets[i].End - uint32(len(encodedTuple)),
+			End:   node.freeOffsets[i].End,
+		}
+		if newCellOffsets.Start == node.freeOffsets[i].Start {
+			node.freeOffsets = append(node.freeOffsets[:i], node.freeOffsets[i+1:]...)
+		} else {
+			node.freeOffsets[i].End = newCellOffsets.Start
+		}
+	}
+	if defragment {
+		return node.writeNewNode()
+	}
+	for i, tuple := range newTuples {
+		written, err := node.parent.file.WriteAt(encoded[i], int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id+tuple.offsets.Start))
+		if err != nil {
+			return err
+		}
+		if written != len(encoded) {
+			return errors.New("written less than expected")
+		}
+		node.parent.stats.WriteCalls += 1
+		node.parent.stats.BytesWritten += uint32(len(encoded))
+	}
+	return nil
 }
 
 /******************* PRIVATE *******************/
@@ -207,10 +252,6 @@ func makeTuple(key, value []byte) *tTuple {
 		key:   key,
 		value: value,
 	}
-}
-
-func (node *tNode) defragment() error {
-	return errors.New("not implemented")
 }
 
 func setBit(flags byte, idx int) byte {
