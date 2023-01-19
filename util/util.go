@@ -1,7 +1,5 @@
 package util
 
-import "encoding/binary"
-
 const MaxUint32 uint32 = (1 << 32) - 1
 
 /*
@@ -32,14 +30,4 @@ func Compare(lhs, rhs []byte) int8 {
 		return -1
 	}
 	return 0
-}
-
-func EncodeCell(key, value []byte) []byte {
-	cell := []byte{}
-	cell = binary.BigEndian.AppendUint32(cell, uint32(len(key)))
-	cell = append(cell, key...)
-	if value != nil {
-		cell = append(cell, value...)
-	}
-	return cell
 }

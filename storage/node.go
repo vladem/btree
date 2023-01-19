@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-
-	"github.com/vladem/btree/util"
 )
 
 /******************* PUBLIC *******************/
@@ -133,7 +131,7 @@ func (node *tNode) Save() error {
 		if tuple.offsets != nil {
 			continue
 		}
-		encodedTuple := util.EncodeCell(tuple.key, tuple.value)
+		encodedTuple := encodeTuple(tuple.key, tuple.value)
 		newTuples = append(newTuples, tuple)
 		encoded = append(encoded, encodedTuple)
 		var i int
@@ -156,6 +154,7 @@ func (node *tNode) Save() error {
 		} else {
 			node.freeOffsets[i].End = newCellOffsets.Start
 		}
+		tuple.offsets = &newCellOffsets
 	}
 	if defragment {
 		return node.writeNewNode()
@@ -165,16 +164,30 @@ func (node *tNode) Save() error {
 		if err != nil {
 			return err
 		}
-		if written != len(encoded) {
+		if written != len(encoded[i]) {
 			return errors.New("written less than expected")
 		}
 		node.parent.stats.WriteCalls += 1
 		node.parent.stats.BytesWritten += uint32(len(encoded))
 	}
+	_, err := node.parent.file.WriteAt(node.encodeHeaderOffsetsAndChildren(), int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 /******************* PRIVATE *******************/
+func encodeTuple(key, value []byte) []byte {
+	cell := []byte{}
+	cell = binary.BigEndian.AppendUint32(cell, uint32(len(key)))
+	cell = append(cell, key...)
+	if value != nil {
+		cell = append(cell, value...)
+	}
+	return cell
+}
+
 func (node *tNode) calculateFreeOffsets() {
 	node.freeOffsets = []tCellOffsets{}
 	reserved := pageHeaderSizeBytes + (node.parent.config.MaxCellsCount * 8)
@@ -294,7 +307,7 @@ func (node *tNode) writeNewNode() error {
 	node.raw = make([]byte, node.parent.config.PageSizeBytes)
 	overallLen := 0
 	for _, tuple := range node.tuples {
-		encodedTuple := util.EncodeCell(tuple.key, tuple.value)
+		encodedTuple := encodeTuple(tuple.key, tuple.value)
 		if uint32(len(encodedTuple)) > maxTupleSize(node.parent.config, node.isLeaf) {
 			return fmt.Errorf("tuple max size exceeded")
 		}

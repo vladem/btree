@@ -1,58 +1,36 @@
 package btree
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/vladem/btree/storage"
 	"github.com/vladem/btree/util"
 )
 
 func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
-	/*
-		lastComparison := int8(-1)
-		page, err := t.reader.Read(0)
+	node := t.nodeStorage.RootNode()
+	for {
+		if node.IsLeaf() {
+			break
+		}
+		var i int
+		for i = 0; i < node.KeyCount(); i++ {
+			if util.Compare(target, node.Key(i)) == -1 {
+				break
+			}
+		}
+		var err error
+		node, err = t.nodeStorage.LoadNode(node.Child(i))
 		if err != nil {
 			return nil, err
 		}
-		var cell storage.ICell
-		for {
-			for i := uint32(0); i < page.GetCellsCount(); i++ {
-				cell, err = page.GetCell(i)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read next cell with error [%v], cellId [%v]", err, i)
-				}
-				key, err := cell.GetKey()
-				if err != nil {
-					return nil, fmt.Errorf("failed to read next cell with error [%v], cellId [%v]", err, i)
-				}
-				if key != nil {
-					lastComparison = util.Compare(target, key)
-				} else {
-					lastComparison = -1
-				}
-				// searching for first cell, which key is gte target
-				if lastComparison < 1 {
-					break
-				}
-			}
-			if page.IsLeaf() {
-				break
-			}
-			nextPageId, err := cell.GetValueAsUint32()
-			if err != nil {
-				return nil, err
-			}
-			page, err = t.reader.Read(nextPageId)
-			if err != nil {
-				return nil, err
-			}
+	}
+	for i := 0; i < node.KeyCount(); i++ {
+		if util.Compare(target, node.Key(i)) == 0 {
+			return node.Value(i), nil
 		}
-		if lastComparison != 0 {
-			return nil, nil
-		}
-		return cell.GetValue()
-	*/
-	return nil, errors.New("not implemented")
+	}
+	return nil, nil
 }
 
 func (t *TPagedBTree) Put(key, value []byte) error {
@@ -62,10 +40,12 @@ func (t *TPagedBTree) Put(key, value []byte) error {
 		if err != nil {
 			return err
 		}
-		if err := t.splitChild(newRoot, root); err != nil {
+		if _, err := t.splitChild(newRoot, root); err != nil {
 			return err
 		}
+		root = newRoot
 	}
+	fmt.Printf("%v\n", root.Id())
 	return t.insertNonFull(root, key, value)
 }
 
@@ -76,11 +56,11 @@ func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount uint32) *TPag
 	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: int(maxKeysCount)}
 }
 
-func (t *TPagedBTree) splitChild(parent, child storage.INode) error {
+func (t *TPagedBTree) splitChild(parent, child storage.INode) (storage.INode, error) {
 	lhs := child
 	rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pivotKeyIdx := lhs.KeyCount() / 2
 	pivotKey := lhs.Key(pivotKeyIdx)
@@ -89,6 +69,7 @@ func (t *TPagedBTree) splitChild(parent, child storage.INode) error {
 	}
 	i += 1
 	parent.InsertKey(pivotKey, i)
+	parent.InsertChild(rhs.Id(), i+1)
 	if lhs.IsLeaf() {
 		rhs.ReplaceKeyValues(lhs.KeyValues(pivotKeyIdx, lhs.KeyCount()))
 		lhs.TruncateKeys(pivotKeyIdx)
@@ -101,15 +82,15 @@ func (t *TPagedBTree) splitChild(parent, child storage.INode) error {
 		lhs.TruncateChildren(pivotKeyIdx + 1)
 	}
 	if err := parent.Save(); err != nil {
-		return err
+		return nil, err
 	}
 	if err := lhs.Save(); err != nil {
-		return err
+		return nil, err
 	}
 	if err := rhs.Save(); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return rhs, nil
 }
 
 func (t *TPagedBTree) insertNonFull(node storage.INode, key, value []byte) error {
@@ -135,8 +116,13 @@ func (t *TPagedBTree) insertNonFull(node storage.INode, key, value []byte) error
 		return err
 	}
 	if child.KeyCount() == t.maxKeysCount {
-		if err := t.splitChild(node, child); err != nil {
+		pivotKey := child.Key(child.KeyCount() / 2)
+		newChild, err := t.splitChild(node, child)
+		if err != nil {
 			return err
+		}
+		if util.Compare(key, pivotKey) != -1 {
+			child = newChild
 		}
 	}
 	return t.insertNonFull(child, key, value)
