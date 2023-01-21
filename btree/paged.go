@@ -1,12 +1,11 @@
 package btree
 
 import (
-	"fmt"
-
 	"github.com/vladem/btree/storage"
 	"github.com/vladem/btree/util"
 )
 
+/******************* PUBLIC *******************/
 func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
 	node := t.nodeStorage.RootNode()
 	for {
@@ -45,7 +44,6 @@ func (t *TPagedBTree) Put(key, value []byte) error {
 		}
 		root = newRoot
 	}
-	fmt.Printf("%v\n", root.Id())
 	return t.insertNonFull(root, key, value)
 }
 
@@ -56,6 +54,7 @@ func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount uint32) *TPag
 	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: int(maxKeysCount)}
 }
 
+/******************* PRIVATE *******************/
 func (t *TPagedBTree) splitChild(parent, child storage.INode) (storage.INode, error) {
 	lhs := child
 	rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf())
@@ -75,11 +74,11 @@ func (t *TPagedBTree) splitChild(parent, child storage.INode) (storage.INode, er
 		lhs.TruncateKeys(pivotKeyIdx)
 	} else {
 		rhs.ReplaceKeys(lhs.Keys(pivotKeyIdx, lhs.KeyCount()))
-		lhs.TruncateKeys(pivotKeyIdx)
-		rhsChildren := []uint32{util.MaxUint32}
+		rhsChildren := []uint32{storage.InvalidNodeId}
 		rhsChildren = append(rhsChildren, lhs.Children(pivotKeyIdx+1, lhs.KeyCount()+1)...)
 		rhs.ReplaceChildren(rhsChildren)
 		lhs.TruncateChildren(pivotKeyIdx + 1)
+		lhs.TruncateKeys(pivotKeyIdx)
 	}
 	if err := parent.Save(); err != nil {
 		return nil, err

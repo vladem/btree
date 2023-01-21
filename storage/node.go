@@ -20,7 +20,6 @@ func (p *tNode) Id() uint32 {
 	return p.id
 }
 
-// unsafe
 func (p *tNode) Key(id int) []byte {
 	sOffset := p.tuples[id].offsets.Start
 	eOffset := p.tuples[id].offsets.End
@@ -160,21 +159,11 @@ func (node *tNode) Save() error {
 		return node.writeNewNode()
 	}
 	for i, tuple := range newTuples {
-		written, err := node.parent.file.WriteAt(encoded[i], int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id+tuple.offsets.Start))
-		if err != nil {
+		if err := node.parent.writeAt(encoded[i], int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id+tuple.offsets.Start)); err != nil {
 			return err
 		}
-		if written != len(encoded[i]) {
-			return errors.New("written less than expected")
-		}
-		node.parent.stats.WriteCalls += 1
-		node.parent.stats.BytesWritten += uint32(len(encoded))
 	}
-	_, err := node.parent.file.WriteAt(node.encodeHeaderOffsetsAndChildren(), int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
-	if err != nil {
-		return err
-	}
-	return nil
+	return node.parent.writeAt(node.encodeHeaderOffsetsAndChildren(), int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
 }
 
 /******************* PRIVATE *******************/
@@ -319,14 +308,7 @@ func (node *tNode) writeNewNode() error {
 	}
 	headerOffsetsAndChildren := node.encodeHeaderOffsetsAndChildren()
 	copy(node.raw, headerOffsetsAndChildren)
-	written, err := node.parent.file.WriteAt(node.raw, int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
-	if err != nil {
-		return err
-	}
-	if uint32(written) != node.parent.config.PageSizeBytes {
-		return errors.New("expected to write pageSizeBytes")
-	}
-	return nil
+	return node.parent.writeAt(node.raw, int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
 }
 
 /*

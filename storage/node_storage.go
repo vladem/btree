@@ -71,7 +71,6 @@ func MakeNodeStorage(config TConfig) (INodeStorage, error) {
 		if err != nil {
 			return nil, err
 		}
-		storage.writeHeader()
 		storage.rootNode = root
 		return storage, nil
 	}
@@ -85,18 +84,46 @@ func MakeNodeStorage(config TConfig) (INodeStorage, error) {
 		freePageIds: []uint32{},
 		stats:       &TStorageStatistics{},
 	}
-	err = storage.readHeader()
-	if err != nil {
+	if err := storage.readHeader(); err != nil {
 		return nil, err
 	}
-	err = storage.detectFreePages()
-	if err != nil {
+	if err := storage.detectFreePages(); err != nil {
 		return nil, err
 	}
 	return storage, nil
 }
 
 /******************* PRIVATE *******************/
+func (s *tOnDiskNodeStorage) writeAt(data []byte, offset int64) error {
+	if s.file == nil {
+		return errors.New("already closed")
+	}
+	written, err := s.file.WriteAt(data, offset)
+	if err != nil {
+		return err
+	}
+	if written != len(data) {
+		return errors.New("written less than expected")
+	}
+	s.stats.WriteCalls += 1
+	s.stats.BytesWritten += uint32(len(data))
+	return nil
+}
+
+func (s *tOnDiskNodeStorage) readAt(data []byte, offset int64) error {
+	expectedToRead := len(data)
+	read, err := s.file.ReadAt(data, offset)
+	if err != nil {
+		return fmt.Errorf("failed to read, error [%v]", err)
+	}
+	if read != expectedToRead {
+		return fmt.Errorf("read less than expected, [%v]/[%v]", read, expectedToRead)
+	}
+	s.stats.ReadCalls += 1
+	s.stats.BytesRead += uint32(read)
+	return nil
+}
+
 func (s *tOnDiskNodeStorage) allocateNode(isLeaf bool) (*tNode, error) {
 	if len(s.freePageIds) == 0 {
 		if err := s.allocateNewBatch(); err != nil {
@@ -113,15 +140,9 @@ func (s *tOnDiskNodeStorage) loadNode(id uint32) (*tNode, error) {
 		return nil, errors.New("already closed")
 	}
 	raw := make([]byte, s.config.PageSizeBytes)
-	read, err := s.file.ReadAt(raw, int64(s.config.PageSizeBytes*id+fileHeaderSizeBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read the page, id [%v], error [%v]", id, err)
+	if err := s.readAt(raw, int64(s.config.PageSizeBytes*id+fileHeaderSizeBytes)); err != nil {
+		return nil, err
 	}
-	if uint32(read) != s.config.PageSizeBytes {
-		return nil, fmt.Errorf("not enough bytes to read the page, id [%v], expected [%v], read [%v]", id, s.config.PageSizeBytes, read)
-	}
-	s.stats.ReadCalls += 1
-	s.stats.BytesRead += uint32(read)
 	return makeNodeFromRaw(id, raw, s)
 }
 
@@ -136,8 +157,7 @@ func (s *tOnDiskNodeStorage) allocateRootNode() (*tNode, error) {
 		newRoot.isLeaf = true
 	}
 	s.rootNode = newRoot
-	err = s.writeHeader()
-	if err != nil {
+	if err := s.writeHeader(); err != nil {
 		return nil, err
 	}
 	return newRoot, nil
@@ -145,18 +165,15 @@ func (s *tOnDiskNodeStorage) allocateRootNode() (*tNode, error) {
 
 func (s *tOnDiskNodeStorage) readHeader() error {
 	header := make([]byte, fileHeaderSizeBytes)
-	read, err := s.file.ReadAt(header, 0)
-	if err != nil {
-		return fmt.Errorf("failed to read file header, error [%v]", err)
-	}
-	if uint32(read) != fileHeaderSizeBytes {
-		return fmt.Errorf("not enough bytes to read file header, expected [%v], read [%v]", fileHeaderSizeBytes, read)
+	if err := s.readAt(header, 0); err != nil {
+		return err
 	}
 	layoutVersion := binary.BigEndian.Uint32(header[:4])
 	if layoutVersion != 1 {
 		return fmt.Errorf("usupported layout version [%v]", layoutVersion)
 	}
 	rootNodeId := binary.BigEndian.Uint32(header[4:])
+	var err error
 	s.rootNode, err = s.loadNode(rootNodeId)
 	if err != nil {
 		return err
@@ -168,16 +185,14 @@ func (s *tOnDiskNodeStorage) writeHeader() error {
 	buf := []byte{}
 	buf = binary.BigEndian.AppendUint32(buf, FileLayoutVersion)
 	buf = binary.BigEndian.AppendUint32(buf, s.rootNode.id)
-	_, err := s.file.WriteAt(buf, 0)
-	return err
+	return s.writeAt(buf, 0)
 }
 
 func (s *tOnDiskNodeStorage) allocateNewBatch() error {
 	batchSize := 100
 	pages := make([]byte, int(s.config.PageSizeBytes)*batchSize)
-	written, err := s.file.WriteAt(pages, int64(fileHeaderSizeBytes+s.nextPageId))
-	if err != nil || written != int(s.config.PageSizeBytes)*batchSize {
-		return fmt.Errorf("failed to allocate new batch, err [%v], written [%v]", err, written)
+	if err := s.writeAt(pages, int64(fileHeaderSizeBytes+s.nextPageId)); err != nil {
+		return err
 	}
 	for i := s.nextPageId; i < s.nextPageId+uint32(batchSize); i++ {
 		s.freePageIds = append(s.freePageIds, i)
@@ -203,12 +218,8 @@ func (s *tOnDiskNodeStorage) detectFreePages() error {
 	s.nextPageId = uint32((info.Size()-fileHeaderSizeBytes)/int64(s.config.PageSizeBytes) - 1)
 	for pageId := uint32(0); pageId < s.nextPageId; pageId++ {
 		pageFlags := make([]byte, 1)
-		read, err := s.file.ReadAt(pageFlags, int64(s.config.PageSizeBytes*pageId+fileHeaderSizeBytes))
-		if err != nil {
-			return fmt.Errorf("failed to read the page, id [%v], error [%v]", pageId, err)
-		}
-		if uint32(read) != 1 {
-			return fmt.Errorf("not enough bytes to read the page, id [%v], expected [1], read [%v]", pageId, read)
+		if err := s.readAt(pageFlags, int64(s.config.PageSizeBytes*pageId+fileHeaderSizeBytes)); err != nil {
+			return err
 		}
 		if !checkBit(pageFlags[0], 0) {
 			s.freePageIds = append(s.freePageIds, pageId)

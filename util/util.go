@@ -1,6 +1,10 @@
 package util
 
-const MaxUint32 uint32 = (1 << 32) - 1
+import (
+	"fmt"
+
+	"github.com/vladem/btree/storage"
+)
 
 /*
 Compares two byte arrays, returns integer:
@@ -30,4 +34,61 @@ func Compare(lhs, rhs []byte) int8 {
 		return -1
 	}
 	return 0
+}
+
+func PrintStats(strg storage.INodeStorage) {
+	fmt.Printf("write, calls: [%v], bytes: [%v]\nread, calls: [%v], bytes: [%v]\n", strg.Statistics().WriteCalls, strg.Statistics().BytesWritten, strg.Statistics().ReadCalls, strg.Statistics().BytesRead)
+}
+
+func PrintNode(node storage.INode) {
+	keys := ""
+	values := ""
+	children := ""
+	for i := 0; i < node.KeyCount(); i++ {
+		keys += string(node.Key(i)) + ", "
+		if node.IsLeaf() {
+			values += string(node.Value(i)) + ", "
+		} else {
+			children += fmt.Sprintf("%d", node.Child(i)) + ", "
+		}
+	}
+	if !node.IsLeaf() {
+		children += fmt.Sprintf("%d", node.Child(node.KeyCount())) + ", "
+	}
+	fmt.Printf("Node [%v]:\n"+
+		"leaf: [%v],\n"+
+		"keys: [%v],\n"+
+		"values: [%v],\n"+
+		"children: [%v]\n\n",
+		node.Id(),
+		node.IsLeaf(),
+		keys,
+		values,
+		children,
+	)
+}
+
+func PrintTree(strg storage.INodeStorage) error {
+	seen := make(map[uint32]struct{})
+	queue := []uint32{strg.RootNode().Id()}
+	for len(queue) > 0 {
+		curId := queue[0]
+		queue = queue[1:]
+		if curId == storage.InvalidNodeId {
+			continue
+		}
+		if _, found := seen[curId]; found {
+			return fmt.Errorf("met [%v] twice", curId)
+		}
+		seen[curId] = struct{}{}
+		node, err := strg.LoadNode(curId)
+		if err != nil {
+			return err
+		}
+		if !node.IsLeaf() {
+			queue = append(queue, node.Children(0, node.KeyCount()+1)...)
+		}
+		PrintNode(node)
+	}
+	return nil
 }

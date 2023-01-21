@@ -2,6 +2,7 @@ package storage
 
 import "os"
 
+const InvalidNodeId uint32 = (1 << 32) - 1
 const pageHeaderSizeBytes = 5 // flags [1] + cellsCount [4]
 const fileHeaderSizeBytes = 8 // layout version [4] + root node id [4]
 
