@@ -38,7 +38,7 @@ server -> btree -> storage
 
 ### What is btree?
 
-In a nutshell, this is a datastructure used to store data on disk. Seems that, postgres implements it to store and retrive data associated with a primary key. 
+In a nutshell, this is a datastructure used to store data on disk. Seems that, postgres implements it to store and retrieve data associated with a primary key. 
 
 ### What is the main idea behind it?
 

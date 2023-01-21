@@ -2,6 +2,8 @@ package util
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/vladem/btree/storage"
 )
@@ -91,4 +93,18 @@ func PrintTree(strg storage.INodeStorage) error {
 		PrintNode(node)
 	}
 	return nil
+}
+
+func ReverseSliceBytes(s [][]byte) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+}
+
+func ShuffleSliceBytes(s [][]byte) {
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+	r.Shuffle(len(s), func(i, j int) {
+		s[i], s[j] = s[j], s[i]
+	})
 }

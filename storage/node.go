@@ -20,20 +20,12 @@ func (p *tNode) Id() uint32 {
 	return p.id
 }
 
-func (p *tNode) Key(id int) []byte {
-	sOffset := p.tuples[id].offsets.Start
-	eOffset := p.tuples[id].offsets.End
-	curCellData := p.raw[sOffset:eOffset]
-	keyLen := binary.BigEndian.Uint32(curCellData[:4])
-	return curCellData[4 : 4+keyLen]
+func (node *tNode) Key(id int) []byte {
+	return node.tuples[id].key
 }
 
-func (p *tNode) Value(id int) []byte {
-	sOffset := p.tuples[id].offsets.Start
-	eOffset := p.tuples[id].offsets.End
-	curCellData := p.raw[sOffset:eOffset]
-	keyLen := binary.BigEndian.Uint32(curCellData[:4])
-	return curCellData[4+keyLen:]
+func (node *tNode) Value(id int) []byte {
+	return node.tuples[id].value
 }
 
 func (p *tNode) Keys(idStart, idEnd int) [][]byte {
@@ -112,16 +104,17 @@ func (node *tNode) ReplaceKeyValues(keys, values [][]byte) {
 }
 
 func (node *tNode) UpdateValue(idx int, value []byte) {
+	recalculateFree := (node.tuples[idx].offsets != nil)
 	node.tuples[idx].offsets = nil
+	if recalculateFree {
+		node.calculateFreeOffsets()
+	}
 	node.tuples[idx].value = value
 }
 
 func (node *tNode) Save() error {
 	if node.parent.file == nil {
 		return errors.New("already closed")
-	}
-	if node.raw == nil {
-		return node.writeNewNode()
 	}
 	defragment := false
 	newTuples := []*tTuple{}
@@ -156,7 +149,7 @@ func (node *tNode) Save() error {
 		tuple.offsets = &newCellOffsets
 	}
 	if defragment {
-		return node.writeNewNode()
+		return node.defragment()
 	}
 	for i, tuple := range newTuples {
 		if err := node.parent.writeAt(encoded[i], int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id+tuple.offsets.Start)); err != nil {
@@ -183,9 +176,11 @@ func (node *tNode) calculateFreeOffsets() {
 	if !node.isLeaf {
 		reserved += (node.parent.config.MaxCellsCount + 1) * 4
 	}
-	cellOffsets := make([]*tCellOffsets, len(node.tuples))
-	for i, tuple := range node.tuples {
-		cellOffsets[i] = tuple.offsets
+	cellOffsets := []*tCellOffsets{}
+	for _, tuple := range node.tuples {
+		if tuple.offsets != nil {
+			cellOffsets = append(cellOffsets, tuple.offsets)
+		}
 	}
 	sort.Slice(cellOffsets, func(i, j int) bool {
 		return cellOffsets[i].Start < cellOffsets[j].Start
@@ -203,18 +198,18 @@ func (node *tNode) calculateFreeOffsets() {
 }
 
 func makeNodeFromRaw(nodeId uint32, raw []byte, parent *tOnDiskNodeStorage) (*tNode, error) {
-	node := &tNode{id: nodeId, parent: parent, raw: raw}
-	flags := node.raw[0]
+	node := &tNode{id: nodeId, parent: parent}
+	flags := raw[0]
 	node.isLeaf = checkBit(flags, 1)
-	node.tuples = make([]*tTuple, binary.BigEndian.Uint32(node.raw[1:]))
+	node.tuples = make([]*tTuple, binary.BigEndian.Uint32(raw[1:]))
 	for i := 0; i < len(node.tuples); i++ {
-		sOffset := binary.BigEndian.Uint32(node.raw[pageHeaderSizeBytes+8*i:])
-		eOffset := binary.BigEndian.Uint32(node.raw[pageHeaderSizeBytes+8*i+4:])
-		keyLen := binary.BigEndian.Uint32(node.raw[sOffset:])
-		key := node.raw[sOffset+4 : sOffset+4+keyLen]
+		sOffset := binary.BigEndian.Uint32(raw[pageHeaderSizeBytes+8*i:])
+		eOffset := binary.BigEndian.Uint32(raw[pageHeaderSizeBytes+8*i+4:])
+		keyLen := binary.BigEndian.Uint32(raw[sOffset:])
+		key := raw[sOffset+4 : sOffset+4+keyLen]
 		var value []byte
 		if node.isLeaf {
-			value = node.raw[sOffset+4+keyLen : eOffset]
+			value = raw[sOffset+4+keyLen : eOffset]
 		}
 		node.tuples[i] = &tTuple{
 			key:   key,
@@ -229,7 +224,7 @@ func makeNodeFromRaw(nodeId uint32, raw []byte, parent *tOnDiskNodeStorage) (*tN
 	if !node.isLeaf {
 		node.children = make([]uint32, len(node.tuples)+1)
 		for i := 0; i < len(node.tuples)+1; i++ {
-			node.children[i] = binary.BigEndian.Uint32(node.raw[pageHeaderSizeBytes+8*len(node.tuples)+i*4:])
+			node.children[i] = binary.BigEndian.Uint32(raw[pageHeaderSizeBytes+8*len(node.tuples)+i*4:])
 		}
 	}
 	return node, nil
@@ -240,13 +235,15 @@ func makeNode(nodeId uint32, isLeaf bool, parent *tOnDiskNodeStorage) *tNode {
 	if !isLeaf {
 		children = []uint32{}
 	}
-	return &tNode{
+	node := &tNode{
 		id:       nodeId,
 		isLeaf:   isLeaf,
 		children: children,
 		parent:   parent,
 		tuples:   []*tTuple{},
 	}
+	node.calculateFreeOffsets()
+	return node
 }
 
 func makeTuple(key, value []byte) *tTuple {
@@ -292,73 +289,23 @@ func maxTupleSize(config TConfig, isLeaf bool) uint32 {
 	return uint32(dataSpace / config.MaxCellsCount)
 }
 
-func (node *tNode) writeNewNode() error {
-	node.raw = make([]byte, node.parent.config.PageSizeBytes)
+func (node *tNode) defragment() error {
 	overallLen := 0
-	for _, tuple := range node.tuples {
-		encodedTuple := encodeTuple(tuple.key, tuple.value)
-		if uint32(len(encodedTuple)) > maxTupleSize(node.parent.config, node.isLeaf) {
+	encoded := make([][]byte, len(node.tuples))
+	for i, tuple := range node.tuples {
+		encoded[i] = encodeTuple(tuple.key, tuple.value)
+		if uint32(len(encoded[i])) > maxTupleSize(node.parent.config, node.isLeaf) {
 			return fmt.Errorf("tuple max size exceeded")
 		}
 		tuple.offsets = &tCellOffsets{}
 		tuple.offsets.End = node.parent.config.PageSizeBytes - uint32(overallLen)
-		overallLen += len(encodedTuple)
+		overallLen += len(encoded[i])
 		tuple.offsets.Start = node.parent.config.PageSizeBytes - uint32(overallLen)
-		copy(node.raw[tuple.offsets.Start:tuple.offsets.End], encodedTuple)
 	}
-	headerOffsetsAndChildren := node.encodeHeaderOffsetsAndChildren()
-	copy(node.raw, headerOffsetsAndChildren)
-	return node.parent.writeAt(node.raw, int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
+	allEncoded := []byte{}
+	for i := len(encoded) - 1; i >= 0; i-- {
+		allEncoded = append(allEncoded, encoded[i]...)
+	}
+	node.parent.writeAt(allEncoded, int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*(node.id+1)-uint32(len(allEncoded))))
+	return node.parent.writeAt(node.encodeHeaderOffsetsAndChildren(), int64(fileHeaderSizeBytes+node.parent.config.PageSizeBytes*node.id))
 }
-
-/*
-func (p *tPage) AddCellBefore(key, value []byte, id uint32) error {
-	if uint32(len(p.cellOffsets)) == p.parent.config.MaxCellsCount {
-		return errors.New("mac cells count reached")
-	}
-	if id > uint32(len(p.cellOffsets)) {
-		return errors.New("no such id")
-	}
-	if p.freeOffsets == nil {
-		p.calculateFreeOffsets()
-	}
-	encodedCell := util.EncodeCell(key, value)
-	if int64(len(encodedCell)) > int64(util.MaxUint32) {
-		return errors.New("encoded cell is too big")
-	}
-	freeSpaceBytes := uint32(0)
-	var i int
-	for i = len(p.freeOffsets) - 1; i >= 0; i-- {
-		intervalLen := p.freeOffsets[i].End - p.freeOffsets[i].Start
-		if intervalLen >= uint32(len(encodedCell)) {
-			break
-		}
-		freeSpaceBytes += intervalLen
-	}
-	if i == -1 {
-		if freeSpaceBytes < uint32(len(encodedCell)) {
-			return errors.New("no space left")
-		}
-		p.defragment()
-		i = 0
-	}
-	newCellOffsets := tCellOffsets{
-		Start: p.freeOffsets[i].End - uint32(len(encodedCell)),
-		End:   p.freeOffsets[i].End,
-	}
-	if newCellOffsets.Start == p.freeOffsets[i].Start {
-		p.freeOffsets = append(p.freeOffsets[:i], p.freeOffsets[i+1:]...)
-	} else {
-		p.freeOffsets[i].End = newCellOffsets.Start
-	}
-	copy(p.raw[newCellOffsets.Start:newCellOffsets.End], encodedCell)
-	if id == uint32(len(p.cellOffsets)) {
-		p.cellOffsets = append(p.cellOffsets, newCellOffsets)
-		return nil
-	}
-	p.cellOffsets = append(p.cellOffsets[:id+1], p.cellOffsets[id:]...)
-	p.cellOffsets[id] = newCellOffsets
-	// todo: why not encode cellOffsets here? (put them to raw)
-	return nil
-}
-*/

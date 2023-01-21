@@ -76,8 +76,6 @@ type tNode struct {
 	parent *tOnDiskNodeStorage
 	tuples []*tTuple
 	// only set for internal nodes
-	children []uint32
-	// only set for nodes loaded from disk (or saved)
-	raw         []byte
+	children    []uint32
 	freeOffsets []tCellOffsets
 }
