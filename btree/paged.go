@@ -1,12 +1,16 @@
 package btree
 
 import (
+	"sync"
+
 	"github.com/vladem/btree/storage"
 	"github.com/vladem/btree/util"
 )
 
 /******************* PUBLIC *******************/
 func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	node := t.nodeStorage.RootNode()
 	for {
 		if node.IsLeaf() {
@@ -33,6 +37,8 @@ func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
 }
 
 func (t *TPagedBTree) Put(key, value []byte) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	root := t.nodeStorage.RootNode()
 	if root.KeyCount() == t.maxKeysCount {
 		newRoot, err := t.nodeStorage.AllocateRootNode()
@@ -51,7 +57,7 @@ func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount uint32) *TPag
 	if maxKeysCount%2 != 1 {
 		return nil
 	}
-	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: int(maxKeysCount)}
+	return &TPagedBTree{nodeStorage: nodeStorage, maxKeysCount: int(maxKeysCount), mutex: &sync.Mutex{}}
 }
 
 /******************* PRIVATE *******************/

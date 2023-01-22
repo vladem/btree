@@ -215,7 +215,7 @@ func (s *tOnDiskNodeStorage) detectFreePages() error {
 	if (info.Size()-fileHeaderSizeBytes)%int64(s.config.PageSizeBytes) != 0 {
 		return fmt.Errorf("invalid size [%v] of the file [%v]", info.Size(), s.file.Name())
 	}
-	s.nextPageId = uint32((info.Size()-fileHeaderSizeBytes)/int64(s.config.PageSizeBytes) - 1)
+	s.nextPageId = uint32((info.Size() - fileHeaderSizeBytes) / int64(s.config.PageSizeBytes))
 	for pageId := uint32(0); pageId < s.nextPageId; pageId++ {
 		pageFlags := make([]byte, 1)
 		if err := s.readAt(pageFlags, int64(s.config.PageSizeBytes*pageId+fileHeaderSizeBytes)); err != nil {

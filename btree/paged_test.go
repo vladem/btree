@@ -3,17 +3,12 @@ package btree_test
 import (
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/vladem/btree/btree"
 	"github.com/vladem/btree/storage"
 	"github.com/vladem/btree/util"
 )
-
-func fileName() string {
-	return time.Now().Format("2006-01-02 15:04:05.99999999")
-}
 
 var keys20 = [][]byte{
 	[]byte("aa"),
@@ -61,7 +56,7 @@ var values20 = [][]byte{
 }
 
 func putAndGet(t *testing.T, keys, values [][]byte, maxKeysCount uint32) {
-	filePath := "./" + fileName()
+	filePath := "./" + util.TimeBasedFileName()
 	defer os.Remove(filePath)
 	config := storage.TConfig{PageSizeBytes: 1024, FilePath: filePath, MaxCellsCount: maxKeysCount}
 	strg, err := storage.MakeNodeStorage(config)
@@ -120,7 +115,7 @@ func TestInsertDegree11(t *testing.T) {
 
 func TestLoadFromDisk(t *testing.T) {
 	maxKeysCount := uint32(5)
-	filePath := "./" + fileName()
+	filePath := "./" + util.TimeBasedFileName()
 	defer os.Remove(filePath)
 	config := storage.TConfig{PageSizeBytes: 1024, FilePath: filePath, MaxCellsCount: maxKeysCount}
 	strg, err := storage.MakeNodeStorage(config)

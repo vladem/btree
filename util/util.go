@@ -108,3 +108,7 @@ func ShuffleSliceBytes(s [][]byte) {
 		s[i], s[j] = s[j], s[i]
 	})
 }
+
+func TimeBasedFileName() string {
+	return time.Now().Format("2006-01-02 15:04:05.99999999")
+}
