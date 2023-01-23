@@ -104,9 +104,8 @@ func (node *tNode) ReplaceKeyValues(keys, values [][]byte) {
 }
 
 func (node *tNode) UpdateValue(idx int, value []byte) {
-	recalculateFree := (node.tuples[idx].offsets != nil)
-	node.tuples[idx].offsets = nil
-	if recalculateFree {
+	if node.tuples[idx].offsets != nil {
+		node.tuples[idx].offsets = nil
 		node.calculateFreeOffsets()
 	}
 	node.tuples[idx].value = value

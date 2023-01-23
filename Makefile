@@ -2,4 +2,5 @@ test:
 	go clean -testcache && go test -v ./...
 
 inspect:
-	od -A d -b db
+	hexdump -e '"%_ad:\t"' -e '16/1 "%03u "' -e '"\n"' db
+

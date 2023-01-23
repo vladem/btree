@@ -142,4 +142,42 @@ func TestLoadFromDisk(t *testing.T) {
 	}
 }
 
-// func TestUpdateValues(t *testing.T) {}
+func TestUpdateValues(t *testing.T) {
+	maxKeysCount := uint32(5)
+	filePath := "./" + util.TimeBasedFileName()
+	defer os.Remove(filePath)
+	config := storage.TConfig{PageSizeBytes: 1024, FilePath: filePath, MaxCellsCount: maxKeysCount}
+	strg, err := storage.MakeNodeStorage(config)
+	require.Empty(t, err)
+	defer strg.Close()
+	tree := btree.MakePagedBTree(strg, maxKeysCount)
+	require.NotEmpty(t, tree)
+	values := make([][]byte, len(values20))
+	copy(values, values20)
+	for i, key := range keys20 {
+		require.Empty(t, tree.Put(key, values[i]))
+	}
+	for i, key := range keys20 {
+		val, err := tree.Get(key)
+		require.Empty(t, err)
+		require.Equal(t, values[i], val)
+	}
+	values[3] = []byte("updated_value")
+	require.Empty(t, tree.Put(keys20[3], values[3]))
+	for i, key := range keys20 {
+		val, err := tree.Get(key)
+		require.Empty(t, err)
+		require.Equal(t, values[i], val)
+	}
+	require.Empty(t, strg.Close())
+
+	strg, err = storage.MakeNodeStorage(config)
+	require.Empty(t, err)
+	tree = btree.MakePagedBTree(strg, maxKeysCount)
+	require.NotEmpty(t, tree)
+	for i, key := range keys20 {
+		val, err := tree.Get(key)
+		require.Empty(t, err)
+		require.Equal(t, values[i], val)
+	}
+}
