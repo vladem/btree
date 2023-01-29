@@ -1,11 +1,13 @@
 package btree
 
 import (
+	"io"
 	"sync"
 
 	"github.com/vladem/btree/storage"
-	"github.com/vladem/btree/util"
 )
+
+const chunkSize = 1024
 
 /******************* PUBLIC *******************/
 func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
@@ -18,7 +20,11 @@ func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
 		}
 		var i int
 		for i = 0; i < node.KeyCount(); i++ {
-			if util.Compare(target, node.Key(i)) == -1 {
+			rel, err := compare(target, node.Key(i), chunkSize)
+			if err != nil {
+				return nil, err
+			}
+			if rel == -1 {
 				break
 			}
 		}
@@ -29,7 +35,11 @@ func (t *TPagedBTree) Get(target []byte) ([]byte, error) {
 		}
 	}
 	for i := 0; i < node.KeyCount(); i++ {
-		if util.Compare(target, node.Key(i)) == 0 {
+		rel, err := compare(target, node.Key(i), chunkSize)
+		if err != nil {
+			return nil, err
+		}
+		if rel == 0 {
 			return node.Value(i), nil
 		}
 	}
@@ -61,30 +71,73 @@ func MakePagedBTree(nodeStorage storage.INodeStorage, maxKeysCount uint32) *TPag
 }
 
 /******************* PRIVATE *******************/
+/*
+Compares two byte arrays, returns integer:
+if lhs < rhs:	-1
+if lhs == rhs:	0
+if lhs > rhs:	1
+*/
+func compare(lhs []byte, rhs io.Reader, chunkSize int) (int8, error) {
+	var (
+		lhsIdx = 0
+	)
+	buf := make([]byte, chunkSize)
+	for {
+		n, err := rhs.Read(buf)
+		if err != nil && err != io.EOF {
+			return 0, err
+		}
+		i := 0
+		for ; i < n && lhsIdx < len(lhs) && lhs[lhsIdx] == buf[i]; i, lhsIdx = i+1, lhsIdx+1 {
+		}
+		if i == n && err != io.EOF {
+			continue
+		}
+		if i < n && lhsIdx < len(lhs) {
+			res := int8(-1)
+			if lhs[lhsIdx] > buf[i] {
+				res = 1
+			}
+			return res, nil
+		}
+		res := int8(0)
+		if i < n {
+			res = -1
+		}
+		if lhsIdx < len(lhs) {
+			res = 1
+		}
+		return res, nil
+	}
+}
+
 func (t *TPagedBTree) splitChild(parent, child storage.INode) (storage.INode, error) {
 	lhs := child
-	rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf())
+	pivotKeyIdx := lhs.KeyCount() / 2
+	pivotKey, err := lhs.KeyFull(pivotKeyIdx)
 	if err != nil {
 		return nil, err
 	}
-	pivotKeyIdx := lhs.KeyCount() / 2
-	pivotKey := lhs.Key(pivotKeyIdx)
 	i := parent.KeyCount() - 1
-	for ; i >= 0 && util.Compare(pivotKey, parent.Key(i)) == -1; i-- {
+	for {
+		if i < 0 {
+			break
+		}
+		rel, err := compare(pivotKey, parent.Key(i), chunkSize)
+		if err != nil {
+			return nil, err
+		}
+		if rel > -1 {
+			break
+		}
+		i -= 1
 	}
 	i += 1
+	rhs, err := lhs.SplitAt(pivotKeyIdx)
 	parent.InsertKey(pivotKey, i)
 	parent.InsertChild(rhs.Id(), i+1)
-	if lhs.IsLeaf() {
-		rhs.ReplaceKeyValues(lhs.KeyValues(pivotKeyIdx, lhs.KeyCount()))
-		lhs.TruncateKeys(pivotKeyIdx)
-	} else {
-		rhs.ReplaceKeys(lhs.Keys(pivotKeyIdx, lhs.KeyCount()))
-		rhsChildren := []uint32{storage.InvalidNodeId}
-		rhsChildren = append(rhsChildren, lhs.Children(pivotKeyIdx+1, lhs.KeyCount()+1)...)
-		rhs.ReplaceChildren(rhsChildren)
-		lhs.TruncateChildren(pivotKeyIdx + 1)
-		lhs.TruncateKeys(pivotKeyIdx)
+	if err != nil {
+		return nil, err
 	}
 	if err := parent.Save(); err != nil {
 		return nil, err
@@ -102,7 +155,11 @@ func (t *TPagedBTree) insertNonFull(node storage.INode, key, value []byte) error
 	i := node.KeyCount() - 1
 	lastCompare := int8(1)
 	for ; i >= 0; i-- {
-		lastCompare = util.Compare(key, node.Key(i))
+		var err error
+		lastCompare, err = compare(key, node.Key(i), chunkSize)
+		if err != nil {
+			return err
+		}
 		if lastCompare != -1 {
 			break
 		}
@@ -126,7 +183,11 @@ func (t *TPagedBTree) insertNonFull(node storage.INode, key, value []byte) error
 		if err != nil {
 			return err
 		}
-		if util.Compare(key, pivotKey) != -1 {
+		rel, err := compare(key, pivotKey, chunkSize)
+		if err != nil {
+			return err
+		}
+		if rel != -1 {
 			child = newChild
 		}
 	}

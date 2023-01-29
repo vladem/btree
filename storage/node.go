@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 )
 
@@ -20,21 +21,39 @@ func (p *tNode) Id() uint32 {
 	return p.id
 }
 
-func (node *tNode) Key(id int) []byte {
-	return node.tuples[id].key
+func (node *tNode) Key(id int) io.Reader {
+	// todo: implement me
+	return nil
+}
+
+func (node *tNode) KeyFull(id int) ([]byte, error) {
+	key := []byte{}
+	buf := make([]byte, 1024)
+	reader := node.Key(id)
+	for {
+		n, err := reader.Read(buf)
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		key = append(key, buf[:n]...)
+		if err == io.EOF {
+			break
+		}
+	}
+	return key, nil
 }
 
 func (node *tNode) Value(id int) []byte {
 	return node.tuples[id].value
 }
 
-func (p *tNode) Keys(idStart, idEnd int) [][]byte {
-	keys := [][]byte{}
-	for i := idStart; i < idEnd; i++ {
-		keys = append(keys, p.Key(i))
-	}
-	return keys
-}
+// func (p *tNode) Keys(idStart, idEnd int) [][]byte {
+// 	keys := [][]byte{}
+// 	for i := idStart; i < idEnd; i++ {
+// 		keys = append(keys, p.Key(i))
+// 	}
+// 	return keys
+// }
 
 func (p *tNode) Child(idx int) uint32 {
 	return p.children[idx]
@@ -46,13 +65,13 @@ func (p *tNode) Children(idStart, idEnd int) []uint32 {
 	return res
 }
 
-func (p *tNode) KeyValues(idStart, idEnd int) ([][]byte, [][]byte) {
-	values := [][]byte{}
-	for i := idStart; i < idEnd; i++ {
-		values = append(values, p.Value(i))
-	}
-	return p.Keys(idStart, idEnd), values
-}
+// func (p *tNode) KeyValues(idStart, idEnd int) ([][]byte, [][]byte) {
+// 	values := [][]byte{}
+// 	for i := idStart; i < idEnd; i++ {
+// 		values = append(values, p.Value(i))
+// 	}
+// 	return p.Keys(idStart, idEnd), values
+// }
 
 func (node *tNode) InsertKey(key []byte, idx int) {
 	node.InsertKeyValue(key, nil, idx)
@@ -67,24 +86,43 @@ func (p *tNode) InsertChild(childId uint32, idx int) {
 	p.children[idx] = childId
 }
 
-func (node *tNode) ReplaceKeys(keys [][]byte) {
-	node.tuples = []*tTuple{}
-	for _, key := range keys {
-		node.tuples = append(node.tuples, makeTuple(key, nil))
-	}
+func (lhs *tNode) SplitAt(pivotKeyIdx int) (INode, error) {
+	// rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf())
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if lhs.IsLeaf() {
+	// 	rhs.ReplaceKeyValues(lhs.KeyValues(pivotKeyIdx, lhs.KeyCount()))
+	// 	lhs.TruncateKeys(pivotKeyIdx)
+	// } else {
+	// 	rhs.ReplaceKeys(lhs.Keys(pivotKeyIdx, lhs.KeyCount()))
+	// 	rhsChildren := []uint32{storage.InvalidNodeId}
+	// 	rhsChildren = append(rhsChildren, lhs.Children(pivotKeyIdx+1, lhs.KeyCount()+1)...)
+	// 	rhs.ReplaceChildren(rhsChildren)
+	// 	lhs.TruncateChildren(pivotKeyIdx + 1)
+	// 	lhs.TruncateKeys(pivotKeyIdx)
+	// }
+	return nil, errors.New("not implemented")
 }
 
-func (node *tNode) ReplaceChildren(childIds []uint32) {
-	node.children = childIds
-}
+// func (node *tNode) ReplaceKeys(keys [][]byte) {
+// 	node.tuples = []*tTuple{}
+// 	for _, key := range keys {
+// 		node.tuples = append(node.tuples, makeTuple(key, nil))
+// 	}
+// }
 
-func (node *tNode) TruncateKeys(tillIdx int) {
-	node.tuples = node.tuples[:tillIdx]
-}
+// func (node *tNode) ReplaceChildren(childIds []uint32) {
+// 	node.children = childIds
+// }
 
-func (node *tNode) TruncateChildren(tillIdx int) {
-	node.children = node.children[:tillIdx]
-}
+// func (node *tNode) TruncateKeys(tillIdx int) {
+// 	node.tuples = node.tuples[:tillIdx]
+// }
+
+// func (node *tNode) TruncateChildren(tillIdx int) {
+// 	node.children = node.children[:tillIdx]
+// }
 
 func (node *tNode) InsertKeyValue(key []byte, value []byte, idx int) {
 	tuple := makeTuple(key, value)
@@ -96,12 +134,12 @@ func (node *tNode) InsertKeyValue(key []byte, value []byte, idx int) {
 	node.tuples[idx] = tuple
 }
 
-func (node *tNode) ReplaceKeyValues(keys, values [][]byte) {
-	node.tuples = []*tTuple{}
-	for i, key := range keys {
-		node.tuples = append(node.tuples, makeTuple(key, values[i]))
-	}
-}
+// func (node *tNode) ReplaceKeyValues(keys, values [][]byte) {
+// 	node.tuples = []*tTuple{}
+// 	for i, key := range keys {
+// 		node.tuples = append(node.tuples, makeTuple(key, values[i]))
+// 	}
+// }
 
 func (node *tNode) UpdateValue(idx int, value []byte) {
 	if node.tuples[idx].offsets != nil {

@@ -152,7 +152,7 @@ func (s *tOnDiskNodeStorage) allocateRootNode() (*tNode, error) {
 		return nil, err
 	}
 	if s.rootNode != nil {
-		newRoot.ReplaceChildren([]uint32{s.rootNode.Id()})
+		newRoot.children = []uint32{s.rootNode.Id()}
 	} else {
 		newRoot.isLeaf = true
 	}

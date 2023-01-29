@@ -1,9 +1,12 @@
 package storage
 
-import "os"
+import (
+	"io"
+	"os"
+)
 
 const InvalidNodeId uint32 = (1 << 32) - 1
-const pageHeaderSizeBytes = 5 // flags [1] + cellsCount [4]
+const pageHeaderSizeBytes = 9 // flags [1] + cellsCount [4] + overflow page id [4]
 const fileHeaderSizeBytes = 8 // layout version [4] + root node id [4]
 
 type TConfig struct {
@@ -23,20 +26,14 @@ type INode interface {
 	IsLeaf() bool
 	KeyCount() int
 	Id() uint32
-	Key(id int) []byte
-	Keys(idStart, idEnd int) [][]byte
+	Key(id int) io.Reader
+	KeyFull(id int) ([]byte, error)
 	Value(id int) []byte
-	KeyValues(idStart, idEnd int) ([][]byte, [][]byte)
 	Child(idx int) uint32
-	Children(idStart, idEnd int) []uint32
 	InsertKey(key []byte, idx int)
 	InsertKeyValue(key []byte, value []byte, idx int)
 	InsertChild(childId uint32, idx int)
-	ReplaceKeys(keys [][]byte)
-	ReplaceChildren(childIds []uint32)
-	ReplaceKeyValues(keys, values [][]byte)
-	TruncateKeys(tillIdx int)
-	TruncateChildren(tillIdx int)
+	SplitAt(idx int) (INode, error)
 	UpdateValue(idx int, value []byte)
 	Save() error
 }
@@ -78,4 +75,17 @@ type tNode struct {
 	// only set for internal nodes
 	children    []uint32
 	freeOffsets []tCellOffsets
+}
+
+type tTupleV2 struct {
+	offsets        *tCellOffsets
+	overflowCellId uint32
+	key            []byte
+	value          []byte
+}
+
+type tNodeV2 struct {
+	id             uint32
+	isLeaf         bool
+	overflowPageId uint32
 }
