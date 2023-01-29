@@ -7,9 +7,9 @@ import (
 
 const InvalidNodeId uint32 = (1 << 32) - 1
 
-// const pageHeaderSizeBytes = 9 // flags [1] + cellsCount [4] + overflow page id [4]
-const pageHeaderSizeBytes = 5 // flags [1] + cellsCount [4]
-const fileHeaderSizeBytes = 8 // layout version [4] + root node id [4]
+const pageHeaderSizeBytes = 5   // flags [1] + cellsCount [4]
+const pageHeaderV2SizeBytes = 9 // flags [1] + cellsCount [4] + overflow page id [4]
+const fileHeaderSizeBytes = 8   // layout version [4] + root node id [4]
 
 type TConfig struct {
 	PageSizeBytes uint32 // page size is limited with ~4GB
@@ -42,7 +42,6 @@ type INode interface {
 
 type INodeStorage interface {
 	RootNode() INode
-	AllocateNode(isLeaf bool) (INode, error)
 	AllocateRootNode() (INode, error)
 	LoadNode(id uint32) (INode, error)
 	Close() error
@@ -50,12 +49,13 @@ type INodeStorage interface {
 }
 
 type tOnDiskNodeStorage struct {
-	config      TConfig
-	rootNode    *tNode
-	file        *os.File
-	nextPageId  uint32
-	freePageIds []uint32
-	stats       *TStorageStatistics
+	config        TConfig
+	rootNode      INode
+	file          *os.File
+	nextPageId    uint32
+	freePageIds   []uint32
+	stats         *TStorageStatistics
+	layoutVersion uint32
 }
 
 type tCellOffsets struct {

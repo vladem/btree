@@ -70,19 +70,23 @@ func (p *tNode) InsertChild(childId uint32, idx int) {
 }
 
 func (lhs *tNode) SplitAt(pivotKeyIdx int) (INode, error) {
-	rhs, err := lhs.parent.allocateNode(lhs.IsLeaf())
+	rhsChildren := []uint32{InvalidNodeId}
+	if !lhs.IsLeaf() {
+		rhsChildren = append(rhsChildren, lhs.children[pivotKeyIdx+1:]...)
+		lhs.children = lhs.children[:pivotKeyIdx+1]
+	}
+	rhs, err := lhs.parent.allocateNode(lhs.IsLeaf(), rhsChildren)
 	if err != nil {
 		return nil, err
 	}
-	rhs.tuples = lhs.tuples[pivotKeyIdx:]
-	lhs.tuples = lhs.tuples[:pivotKeyIdx]
-	for _, tuple := range rhs.tuples {
-		tuple.offsets = nil
+	rhsCasted, ok := rhs.(*tNode)
+	if !ok {
+		return nil, errors.New("downcast failed")
 	}
-	if !lhs.IsLeaf() {
-		rhs.children = []uint32{InvalidNodeId}
-		rhs.children = append(rhs.children, lhs.children[pivotKeyIdx+1:]...)
-		lhs.children = lhs.children[:pivotKeyIdx+1]
+	rhsCasted.tuples = lhs.tuples[pivotKeyIdx:]
+	lhs.tuples = lhs.tuples[:pivotKeyIdx]
+	for _, tuple := range rhsCasted.tuples {
+		tuple.offsets = nil
 	}
 	return rhs, nil
 }
@@ -197,55 +201,6 @@ func (node *tNode) calculateFreeOffsets() {
 	if prevEnd != node.parent.config.PageSizeBytes {
 		node.freeOffsets = append(node.freeOffsets, tCellOffsets{Start: prevEnd, End: node.parent.config.PageSizeBytes})
 	}
-}
-
-func makeNodeFromRaw(nodeId uint32, raw []byte, parent *tOnDiskNodeStorage) (*tNode, error) {
-	node := &tNode{id: nodeId, parent: parent}
-	flags := raw[0]
-	node.isLeaf = checkBit(flags, 1)
-	node.tuples = make([]*tTuple, binary.BigEndian.Uint32(raw[1:]))
-	for i := 0; i < len(node.tuples); i++ {
-		sOffset := binary.BigEndian.Uint32(raw[pageHeaderSizeBytes+8*i:])
-		eOffset := binary.BigEndian.Uint32(raw[pageHeaderSizeBytes+8*i+4:])
-		keyLen := binary.BigEndian.Uint32(raw[sOffset:])
-		key := raw[sOffset+4 : sOffset+4+keyLen]
-		var value []byte
-		if node.isLeaf {
-			value = raw[sOffset+4+keyLen : eOffset]
-		}
-		node.tuples[i] = &tTuple{
-			key:   key,
-			value: value,
-			offsets: &tCellOffsets{
-				Start: sOffset,
-				End:   eOffset,
-			},
-		}
-	}
-	node.calculateFreeOffsets()
-	if !node.isLeaf {
-		node.children = make([]uint32, len(node.tuples)+1)
-		for i := 0; i < len(node.tuples)+1; i++ {
-			node.children[i] = binary.BigEndian.Uint32(raw[pageHeaderSizeBytes+8*len(node.tuples)+i*4:])
-		}
-	}
-	return node, nil
-}
-
-func makeNode(nodeId uint32, isLeaf bool, parent *tOnDiskNodeStorage) *tNode {
-	var children []uint32
-	if !isLeaf {
-		children = []uint32{}
-	}
-	node := &tNode{
-		id:       nodeId,
-		isLeaf:   isLeaf,
-		children: children,
-		parent:   parent,
-		tuples:   []*tTuple{},
-	}
-	node.calculateFreeOffsets()
-	return node
 }
 
 func makeTuple(key, value []byte) *tTuple {
