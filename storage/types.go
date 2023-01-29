@@ -6,7 +6,9 @@ import (
 )
 
 const InvalidNodeId uint32 = (1 << 32) - 1
-const pageHeaderSizeBytes = 9 // flags [1] + cellsCount [4] + overflow page id [4]
+
+// const pageHeaderSizeBytes = 9 // flags [1] + cellsCount [4] + overflow page id [4]
+const pageHeaderSizeBytes = 5 // flags [1] + cellsCount [4]
 const fileHeaderSizeBytes = 8 // layout version [4] + root node id [4]
 
 type TConfig struct {
@@ -88,4 +90,9 @@ type tNodeV2 struct {
 	id             uint32
 	isLeaf         bool
 	overflowPageId uint32
+}
+
+type tSliceReader struct {
+	data   []byte
+	curPos int
 }

@@ -22,8 +22,7 @@ func (p *tNode) Id() uint32 {
 }
 
 func (node *tNode) Key(id int) io.Reader {
-	// todo: implement me
-	return nil
+	return &tSliceReader{data: node.tuples[id].key}
 }
 
 func (node *tNode) KeyFull(id int) ([]byte, error) {
@@ -47,14 +46,6 @@ func (node *tNode) Value(id int) []byte {
 	return node.tuples[id].value
 }
 
-// func (p *tNode) Keys(idStart, idEnd int) [][]byte {
-// 	keys := [][]byte{}
-// 	for i := idStart; i < idEnd; i++ {
-// 		keys = append(keys, p.Key(i))
-// 	}
-// 	return keys
-// }
-
 func (p *tNode) Child(idx int) uint32 {
 	return p.children[idx]
 }
@@ -64,14 +55,6 @@ func (p *tNode) Children(idStart, idEnd int) []uint32 {
 	copy(res, p.children[idStart:idEnd])
 	return res
 }
-
-// func (p *tNode) KeyValues(idStart, idEnd int) ([][]byte, [][]byte) {
-// 	values := [][]byte{}
-// 	for i := idStart; i < idEnd; i++ {
-// 		values = append(values, p.Value(i))
-// 	}
-// 	return p.Keys(idStart, idEnd), values
-// }
 
 func (node *tNode) InsertKey(key []byte, idx int) {
 	node.InsertKeyValue(key, nil, idx)
@@ -87,42 +70,22 @@ func (p *tNode) InsertChild(childId uint32, idx int) {
 }
 
 func (lhs *tNode) SplitAt(pivotKeyIdx int) (INode, error) {
-	// rhs, err := t.nodeStorage.AllocateNode(lhs.IsLeaf())
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if lhs.IsLeaf() {
-	// 	rhs.ReplaceKeyValues(lhs.KeyValues(pivotKeyIdx, lhs.KeyCount()))
-	// 	lhs.TruncateKeys(pivotKeyIdx)
-	// } else {
-	// 	rhs.ReplaceKeys(lhs.Keys(pivotKeyIdx, lhs.KeyCount()))
-	// 	rhsChildren := []uint32{storage.InvalidNodeId}
-	// 	rhsChildren = append(rhsChildren, lhs.Children(pivotKeyIdx+1, lhs.KeyCount()+1)...)
-	// 	rhs.ReplaceChildren(rhsChildren)
-	// 	lhs.TruncateChildren(pivotKeyIdx + 1)
-	// 	lhs.TruncateKeys(pivotKeyIdx)
-	// }
-	return nil, errors.New("not implemented")
+	rhs, err := lhs.parent.allocateNode(lhs.IsLeaf())
+	if err != nil {
+		return nil, err
+	}
+	rhs.tuples = lhs.tuples[pivotKeyIdx:]
+	lhs.tuples = lhs.tuples[:pivotKeyIdx]
+	for _, tuple := range rhs.tuples {
+		tuple.offsets = nil
+	}
+	if !lhs.IsLeaf() {
+		rhs.children = []uint32{InvalidNodeId}
+		rhs.children = append(rhs.children, lhs.children[pivotKeyIdx+1:]...)
+		lhs.children = lhs.children[:pivotKeyIdx+1]
+	}
+	return rhs, nil
 }
-
-// func (node *tNode) ReplaceKeys(keys [][]byte) {
-// 	node.tuples = []*tTuple{}
-// 	for _, key := range keys {
-// 		node.tuples = append(node.tuples, makeTuple(key, nil))
-// 	}
-// }
-
-// func (node *tNode) ReplaceChildren(childIds []uint32) {
-// 	node.children = childIds
-// }
-
-// func (node *tNode) TruncateKeys(tillIdx int) {
-// 	node.tuples = node.tuples[:tillIdx]
-// }
-
-// func (node *tNode) TruncateChildren(tillIdx int) {
-// 	node.children = node.children[:tillIdx]
-// }
 
 func (node *tNode) InsertKeyValue(key []byte, value []byte, idx int) {
 	tuple := makeTuple(key, value)
@@ -133,13 +96,6 @@ func (node *tNode) InsertKeyValue(key []byte, value []byte, idx int) {
 	node.tuples = append(node.tuples[:idx+1], node.tuples[idx:]...)
 	node.tuples[idx] = tuple
 }
-
-// func (node *tNode) ReplaceKeyValues(keys, values [][]byte) {
-// 	node.tuples = []*tTuple{}
-// 	for i, key := range keys {
-// 		node.tuples = append(node.tuples, makeTuple(key, values[i]))
-// 	}
-// }
 
 func (node *tNode) UpdateValue(idx int, value []byte) {
 	if node.tuples[idx].offsets != nil {
@@ -197,6 +153,15 @@ func (node *tNode) Save() error {
 }
 
 /******************* PRIVATE *******************/
+func (r *tSliceReader) Read(buf []byte) (n int, err error) {
+	n = copy(buf, r.data[r.curPos:])
+	r.curPos += n
+	if r.curPos == len(r.data) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
 func encodeTuple(key, value []byte) []byte {
 	cell := []byte{}
 	cell = binary.BigEndian.AppendUint32(cell, uint32(len(key)))
